@@ -138,7 +138,7 @@
           "item_id": "2.1",
           "title": "ASCII Wireframes & User Flow Design",
           "description": "Create text-based wireframes and user interaction flows for UI validation",
-          "status": "not_done",
+          "status": "completed",
           "task_guide": "references/startup_tasks/2.1-ascii-wireframes-user-flow.md",
           "deliverables": [
             "ASCII wireframes for all major UI components and layouts",
@@ -147,13 +147,13 @@
             "Error state and edge case flow documentation",
             "Stakeholder review and feedback integration"
           ],
-          "completion_notes": ""
+          "completion_notes": "Interactive CLI wireframes and user flows completed through iterative design conversation. Created v1 (GUI concept) and v2 (final interactive CLI) wireframes with comprehensive user journey mapping. Validated non-interrupting batch processing approach, per-video output structure (output/{video-filename}/), and end-of-batch error handling. Complete user flows cover primary path, alternative paths, error recovery, edge cases, and administrative workflows. Component hierarchy established for Python CLI tool with step-by-step prompts. Technology confirmed as simple Python script with built-in libraries. Documented in references/mockups/ascii-wireframes/ and reports/startup/ascii-wireframes-2.1.md"
         },
         {
           "item_id": "2.2",
           "title": "Interactive Mock using Tech Stack",
           "description": "Build working HTML/CSS/JavaScript prototype using project tech stack for hands-on UI validation",
-          "status": "not_done",
+          "status": "completed",
           "task_guide": "references/startup_tasks/2.2-interactive-mock-tech-stack.md",
           "deliverables": [
             "Interactive HTML mockup with platform styling",
@@ -164,7 +164,7 @@
             "Mock project organized in /references/2.2-interactive-mock-tech-stack/",
             "Completion report documenting mock validation results"
           ],
-          "completion_notes": ""
+          "completion_notes": "Task marked as not applicable - command-line tool interface fully expressed in Task 2.1 ASCII wireframes. Interactive CLI design with step-by-step prompts, real-time progress display, and comprehensive error handling already provides complete UI specification. No HTML/CSS/JavaScript prototype needed for command-line tool validation."
         },
         {
           "item_id": "2.3",
@@ -322,10 +322,10 @@
     "completed": "Item fully completed and validated"
   },
   "navigation": {
-    "next_item": "2.1",
-    "next_item_title": "ASCII Wireframes & User Flow Design", 
-    "next_item_description": "Create text-based wireframes and user interaction flows for UI validation",
-    "completion_percentage": 42
+    "next_item": "2.3",
+    "next_item_title": "Feature & Implementation Specification", 
+    "next_item_description": "Create implementation blueprint through interactive architectural decision-making that eliminates development uncertainty",
+    "completion_percentage": 58
   },
   "completion_criteria": {
     "phase_0_complete": "Repository initialized, .gitignore configured, initial framework committed and pushed",

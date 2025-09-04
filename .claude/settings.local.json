@@ -28,6 +28,10 @@
       "Bash(git remote add:*)",
       "Read(/C:\\n8n_shared\\dev\\startup-alexdev-video-summarizer/**)",
       "Read(/C:\\n8n_shared\\dev\\startup-alexdev-video-summarizer/**)",
+      "Read(/C:\\n8n_shared\\dev\\startup-alexdev-video-summarizer/**)",
+      "Read(/C:\\n8n_shared\\dev\\startup-alexdev-video-summarizer\\references\\startup_tasks/**)",
+      "Read(/C:\\n8n_shared\\dev\\startup-alexdev-video-summarizer/**)",
+      "Read(/C:\\n8n_shared\\dev\\startup-alexdev-video-summarizer/**)",
       "Read(/C:\\n8n_shared\\dev\\startup-alexdev-video-summarizer/**)"
     ],
     "deny": [],
