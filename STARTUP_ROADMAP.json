@@ -25,7 +25,7 @@
           "item_id": "0.1",
           "title": "Initialize Git Repository",
           "description": "Set up version control and initial repository structure",
-          "status": "completed",
+          "status": "in_progress",
           "task_guide": "references/startup_tasks/0.1-initialize-git-repository.md",
           "deliverables": [
             "Git Repository Initialized: git init command executed successfully",
@@ -58,13 +58,13 @@
             "Business Model Hypothesis: How will this make money?",
             "Market Size Estimate: Is the addressable market large enough?"
           ],
-          "completion_notes": "Completed through interactive conversation validation. Problem: Marketing teams drowning in unlabeled video files, tribal knowledge dependency. Target: Marketing teams (2-10 people) with 100+ video libraries. Solution: AI-powered batch preprocessing converting videos to institutional knowledge via transcription + frame extraction. Value: Eliminate personnel dependency, enable instant asset discovery. Model: Internal tool/consulting service. Market: 2000+ mid-market companies with video library dependency issues. Documented in reports/startup/concept-validation-1.1.md"
+          "completion_notes": "Re-executed through interactive conversation with enhanced scene-based architecture. Problem: Internal team video library chaos (100 videos). Target: Internal team use case. Solution: Scene-by-scene rich analysis pipeline with objects/people/text/music/speaker detection per scene. Value: Transform video chaos into searchable institutional knowledge. Model: Internal tool for productivity. Market: 100-video internal library with concrete need. Enhanced with scene-based processing for 10-15x richer analysis. Documented in reports/startup/concept-validation-1.1.md"
         },
         {
           "item_id": "1.2",
           "title": "Technical Feasibility Study",
           "description": "Technical due diligence to prevent building impossible things",
-          "status": "completed",
+          "status": "in_progress",
           "task_guide": "references/startup_tasks/1.2-technical-feasibility-study.md",
           "deliverables": [
             "Core Technical Requirements: What are the must-have technical capabilities?",
@@ -94,13 +94,13 @@
             "Proven Patterns: Documented reusable architectural patterns",
             "Analysis Documentation: Created references/[project-name]/analysis.md and patterns.md"
           ],
-          "completion_notes": "Analyzed 3 professional-grade reference projects: FFmpeg Napoleon Scripts (shell-based video processing), Whisper-Transcriber (Python batch transcription), and Batch-Whisper (optimization patterns). Complete codebases cloned to references/ directories. Created comprehensive analysis.md and patterns.md for each project documenting architecture, code quality, integration approaches, and reusable patterns. Identified proven commands (scene detection with 0.2 threshold, high-quality frame extraction), error handling patterns, batch processing approaches, and device management strategies. Documented copy/adapt/extend decisions for implementation. Reference code provides solid foundation for rapid development with professional quality standards. Documented in reports/startup/similar-codebase-study-1.3.md"
+          "completion_notes": "Enhanced analysis completed with scene-based architecture focus. Analyzed 6 professional-grade reference projects: Autocrop-Vertical (scene-based YOLO+PySceneDetect integration, 70x performance), VidGear (multi-threaded service architecture), Ultralytics YOLO (production GPU management), PySceneDetect (scene detection algorithms), plus existing FFmpeg-Napoleon and Whisper-Transcriber codebases. Complete codebases cloned with comprehensive analysis.md and patterns.md files. Identified proven scene-based processing architecture achieving 70x performance improvement through representative frame analysis. Documented service coordination patterns for multi-tool pipelines, GPU resource management, error recovery, and production deployment strategies. Ready for implementation with validated technical approach. Documented in reports/startup/similar-codebase-study-1.3-updated.md"
         },
         {
           "item_id": "1.4",
           "title": "Similarities and Differences Analysis",
           "description": "Strategic positioning relative to existing solutions",
-          "status": "completed",
+          "status": "in_progress",
           "task_guide": "references/startup_tasks/1.4-similarities-differences-analysis.md",
           "deliverables": [
             "Similarities Documented: What aspects are similar to reference projects?",
@@ -115,7 +115,7 @@
           "item_id": "1.5",
           "title": "Architecture Decisions Framework",
           "description": "Help make informed technical architecture decisions",
-          "status": "completed",
+          "status": "in_progress",
           "task_guide": "references/startup_tasks/1.5-architecture-decisions-framework.md",
           "deliverables": [
             "Copy Decisions: What patterns/code will we directly adopt?",
@@ -138,7 +138,7 @@
           "item_id": "2.1",
           "title": "ASCII Wireframes & User Flow Design",
           "description": "Create text-based wireframes and user interaction flows for UI validation",
-          "status": "completed",
+          "status": "in_progress",
           "task_guide": "references/startup_tasks/2.1-ascii-wireframes-user-flow.md",
           "deliverables": [
             "ASCII wireframes for all major UI components and layouts",
@@ -153,7 +153,7 @@
           "item_id": "2.2",
           "title": "Interactive Mock using Tech Stack",
           "description": "Build working HTML/CSS/JavaScript prototype using project tech stack for hands-on UI validation",
-          "status": "completed",
+          "status": "in_progress",
           "task_guide": "references/startup_tasks/2.2-interactive-mock-tech-stack.md",
           "deliverables": [
             "Interactive HTML mockup with platform styling",
@@ -322,10 +322,10 @@
     "completed": "Item fully completed and validated"
   },
   "navigation": {
-    "next_item": "2.3",
-    "next_item_title": "Feature & Implementation Specification", 
-    "next_item_description": "Create implementation blueprint through interactive architectural decision-making that eliminates development uncertainty",
-    "completion_percentage": 58
+    "next_item": "1.1",
+    "next_item_title": "Brief Ideation on Concept", 
+    "next_item_description": "Help crystallize a vague idea into a clear problem/solution statement",
+    "completion_percentage": 7
   },
   "completion_criteria": {
     "phase_0_complete": "Repository initialized, .gitignore configured, initial framework committed and pushed",
