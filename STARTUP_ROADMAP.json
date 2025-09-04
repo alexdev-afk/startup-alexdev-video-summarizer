@@ -42,7 +42,7 @@
     {
       "phase_id": 1,
       "phase_name": "Concept & Validation",
-      "status": "not_done",
+      "status": "completed",
       "items": [
         {
           "item_id": "1.1",
@@ -115,7 +115,7 @@
           "item_id": "1.5",
           "title": "Architecture Decisions Framework",
           "description": "Help make informed technical architecture decisions",
-          "status": "not_done",
+          "status": "completed",
           "task_guide": "references/startup_tasks/1.5-architecture-decisions-framework.md",
           "deliverables": [
             "Copy Decisions: What patterns/code will we directly adopt?",
@@ -125,7 +125,7 @@
             "Integration Strategy: How we'll integrate with external systems",
             "Scalability Plan: How the architecture will scale"
           ],
-          "completion_notes": ""
+          "completion_notes": "Technical architecture blueprint established through interactive conversation using copy-first, adapt-next, extend-last approach. Copy decisions: FFmpeg scene detection+extraction, Whisper batch processing, proven error handling patterns. Deviation decisions: no configuration files, guided workflow, zero setup, automated processing. Extension decisions: enhanced transcript headers, master .md index, duplicate detection system. Technology stack: Python 3.11+, FFmpeg, Whisper large model, RTX 5070 GPU acceleration. Integration strategy: completely local processing. Scalability plan: serial processing with batch queue for 100+ video libraries. Complete workflow: single FFmpeg pass → Whisper transcription → duplicate detection → index update. Documented in reports/startup/architecture-decisions-1.5.md"
         }
       ]
     },
@@ -322,10 +322,10 @@
     "completed": "Item fully completed and validated"
   },
   "navigation": {
-    "next_item": "1.5",
-    "next_item_title": "Architecture Decisions Framework", 
-    "next_item_description": "Help make informed technical architecture decisions",
-    "completion_percentage": 35
+    "next_item": "2.1",
+    "next_item_title": "ASCII Wireframes & User Flow Design", 
+    "next_item_description": "Create text-based wireframes and user interaction flows for UI validation",
+    "completion_percentage": 42
   },
   "completion_criteria": {
     "phase_0_complete": "Repository initialized, .gitignore configured, initial framework committed and pushed",
