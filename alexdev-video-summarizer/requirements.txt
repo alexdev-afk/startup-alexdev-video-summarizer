@@ -11,7 +11,7 @@ rich>=13.0.0                # Enhanced CLI output
 
 # Computer Vision & AI Tools - FOR PHASE 2+
 # ultralytics>=8.0.0          # YOLOv8
-# opencv-python>=4.8.0        # OpenCV
+opencv-python>=4.8.0        # OpenCV (required for PySceneDetect)
 # easyocr>=1.7.0              # Text extraction
 # Pillow>=9.0.0               # Image processing
 
@@ -22,7 +22,7 @@ rich>=13.0.0                # Enhanced CLI output
 # soundfile>=0.12.0           # Audio file I/O
 
 # Video Processing - FOR PHASE 2+
-# scenedetect>=0.6.2          # Scene boundary detection
+scenedetect>=0.6.2          # Scene boundary detection
 # imageio[ffmpeg]>=2.25.0     # Video I/O with FFmpeg
 
 # System & Utilities - ACTIVE FOR PHASE 1

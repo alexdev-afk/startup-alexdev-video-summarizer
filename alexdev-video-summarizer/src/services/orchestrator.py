@@ -91,6 +91,19 @@ class VideoProcessingOrchestrator:
                 'scene_count': context.scene_data['scene_count']
             })
             
+            # Step 2.5: Scene Splitting Coordination (Optional - for advanced processing)
+            progress_callback('scene_splitting', {'stage': 'starting'})
+            scene_files = self.scene_service.coordinate_scene_splitting(
+                video_path, 
+                context.scene_data['boundaries'], 
+                self.ffmpeg_service
+            )
+            context.scene_data['scene_files'] = scene_files
+            progress_callback('scene_splitting', {
+                'stage': 'completed',
+                'files_created': len(scene_files)
+            })
+            
             # Step 3: Per-Scene Processing (3 pipelines - FAIL ON ANY TOOL FAILURE)
             for i, scene in enumerate(context.scene_data['scenes'], 1):
                 progress_callback('scene_processing', {

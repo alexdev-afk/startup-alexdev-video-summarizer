@@ -168,8 +168,8 @@ logging:
 
 # Development Settings (for testing)
 development:
-  mock_ai_services: true       # Use mock services for testing (PHASE 1)
-  skip_model_loading: true     # Skip actual model loading (PHASE 1) 
+  mock_ai_services: false      # PHASE 2: Enable real PySceneDetect integration
+  skip_model_loading: true     # Skip AI model loading (still in development)
   skip_ffmpeg_check: false     # FFmpeg is now installed and ready
-  fast_mode: true              # Reduced quality for faster testing (PHASE 1)
-  debug_artifacts: true        # Keep intermediate files for debugging (PHASE 1)
+  fast_mode: true              # Reduced quality for faster testing
+  debug_artifacts: true        # Keep intermediate files for debugging
