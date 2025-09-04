@@ -1,0 +1,355 @@
+{
+  "project": {
+    "name": "alexdev-video-summarizer",
+    "description": "Scene-based institutional knowledge extraction from video libraries using AI pipeline",
+    "version": "1.0.0",
+    "current_phase": 1,
+    "current_item": 1,
+    "last_updated": "2025-09-04"
+  },
+  "phases": [
+    {
+      "phase_id": 1,
+      "phase_name": "Foundation & Functional Baseline",
+      "weeks": "Week 1-2",
+      "status": "not_done",
+      "items": [
+        {
+          "item_id": "1.1",
+          "title": "CLI Framework & FFmpeg Foundation",
+          "description": "Create Rich-based CLI interface and implement FFmpeg video/audio separation foundation",
+          "status": "not_done",
+          "feature_specs": ["cli-interface", "ffmpeg-foundation", "config-system", "output-management"],
+          "deliverables": [
+            "Rich console CLI with 3-screen workflow (Launch→Processing→Complete) from cli-interface.md",
+            "FFmpeg video/audio separation service from ffmpeg-foundation.md extraction pipeline",
+            "YAML configuration system from config-system.md (processing.yaml, paths.yaml)",
+            "Build/output directory management from output-management.md structure",
+            "Error handling foundation from error-handling.md fail-fast approach"
+          ],
+          "completion_notes": ""
+        },
+        {
+          "item_id": "1.2", 
+          "title": "Whisper Transcription Integration",
+          "description": "Implement GPU-based audio transcription using FFmpeg-prepared audio files",
+          "status": "not_done",
+          "feature_specs": ["whisper-transcription"],
+          "deliverables": [
+            "WhisperService class from whisper-transcription.md GPU pipeline implementation",
+            "Speaker identification following whisper-transcription.md diarization approach",
+            "GPU resource management from whisper-transcription.md sequential coordination",
+            "Professional-grade output format from whisper-transcription.md specifications",
+            "Integration with FFmpeg audio.wav files from ffmpeg-foundation.md requirements"
+          ],
+          "completion_notes": ""
+        },
+        {
+          "item_id": "1.3",
+          "title": "YOLO Object Detection Integration",
+          "description": "Implement GPU-based visual object detection using FFmpeg-prepared video files",
+          "status": "not_done",
+          "feature_specs": ["yolo-object-detection"],
+          "deliverables": [
+            "YOLOService class from yolo-object-detection.md GPU pipeline implementation",
+            "Sequential GPU coordination following yolo-object-detection.md resource sharing",
+            "Object/people detection from yolo-object-detection.md processing pipeline",
+            "Integration with FFmpeg video.mp4 files from ffmpeg-foundation.md requirements",
+            "Performance optimization from yolo-object-detection.md frame sampling approach"
+          ],
+          "completion_notes": ""
+        },
+        {
+          "item_id": "1.4",
+          "title": "Functional Baseline Integration Testing",
+          "description": "Integration testing and optimization of FFmpeg→Whisper→YOLO pipeline",
+          "status": "not_done",
+          "deliverables": [
+            "End-to-end pipeline validation with test videos",
+            "GPU memory management optimization between tools",
+            "CLI workflow refinement based on testing results",
+            "Performance benchmarking against 10-minute target",
+            "Error handling validation for common failure scenarios"
+          ],
+          "completion_notes": ""
+        }
+      ]
+    },
+    {
+      "phase_id": 2,
+      "phase_name": "Scene-Based Architecture (70x Performance)",
+      "weeks": "Week 2-3", 
+      "status": "not_done",
+      "items": [
+        {
+          "item_id": "2.1",
+          "title": "PySceneDetect Integration",
+          "description": "Implement scene boundary detection and FFmpeg scene splitting coordination",
+          "status": "not_done",
+          "feature_specs": ["scene-detection"],
+          "deliverables": [
+            "PySceneDetect scene boundary detection from scene-detection.md algorithm implementation",
+            "FFmpeg scene splitting integration from scene-detection.md coordination approach",
+            "Scene metadata management from scene-detection.md context preservation",
+            "Representative frame analysis from scene-detection.md 70x performance optimization",
+            "Scene-by-scene processing workflow from scene-detection.md pipeline architecture"
+          ],
+          "completion_notes": ""
+        },
+        {
+          "item_id": "2.2",
+          "title": "Dual-Pipeline Coordination",
+          "description": "Implement parallel GPU and CPU processing pipelines with scene context",
+          "status": "not_done",
+          "feature_specs": ["dual-pipeline-coordination"],
+          "deliverables": [
+            "GPU pipeline controller from dual-pipeline-coordination.md sequential processing",
+            "CPU pipeline controller from dual-pipeline-coordination.md parallel processing",
+            "Scene context preservation from dual-pipeline-coordination.md metadata management",
+            "Resource synchronization from dual-pipeline-coordination.md coordination patterns",
+            "Per-scene output aggregation from dual-pipeline-coordination.md result compilation"
+          ],
+          "completion_notes": ""
+        },
+        {
+          "item_id": "2.3",
+          "title": "Scene-Based Performance Optimization",
+          "description": "Validate and optimize 70x performance improvement through scene-based processing",
+          "status": "not_done",
+          "deliverables": [
+            "Performance benchmarking: scene-based vs full-video processing",
+            "Representative frame analysis optimization validation",
+            "Memory usage optimization for concurrent scene processing",
+            "Processing time validation against targets",
+            "Quality validation: ensure scene analysis maintains accuracy"
+          ],
+          "completion_notes": ""
+        }
+      ]
+    },
+    {
+      "phase_id": 3,
+      "phase_name": "Complete Audio Pipeline",
+      "weeks": "Week 3-4",
+      "status": "not_done",
+      "items": [
+        {
+          "item_id": "3.1",
+          "title": "LibROSA Music Analysis",
+          "description": "Implement comprehensive music feature extraction using FFmpeg audio files",
+          "status": "not_done",
+          "feature_specs": ["librosa-features"],
+          "deliverables": [
+            "LibROSAService class from librosa-features.md CPU pipeline implementation",
+            "Music analysis features from librosa-features.md (tempo, genre, mood, energy)",
+            "CPU pipeline integration from librosa-features.md parallel processing approach",
+            "Scene-based audio analysis from librosa-features.md context preservation",
+            "Integration with FFmpeg audio.wav from ffmpeg-foundation.md requirements"
+          ],
+          "completion_notes": ""
+        },
+        {
+          "item_id": "3.2",
+          "title": "pyAudioAnalysis Integration",
+          "description": "Implement 68-feature audio analysis and advanced speaker diarization",
+          "status": "not_done",
+          "feature_specs": ["pyaudioanalysis"],
+          "deliverables": [
+            "pyAudioAnalysisService from pyaudioanalysis.md comprehensive feature extraction",
+            "68 audio features implementation from pyaudioanalysis.md feature specification",
+            "Advanced speaker diarization from pyaudioanalysis.md speaker identification",
+            "CPU pipeline coordination from pyaudioanalysis.md parallel processing",
+            "Audio analysis aggregation from pyaudioanalysis.md output management"
+          ],
+          "completion_notes": ""
+        },
+        {
+          "item_id": "3.3",
+          "title": "Complete Audio Pipeline Integration",
+          "description": "Integration testing and optimization of full audio analysis pipeline",
+          "status": "not_done",
+          "deliverables": [
+            "End-to-end audio pipeline validation (Whisper + LibROSA + pyAudioAnalysis)",
+            "CPU resource optimization for parallel audio processing",
+            "Audio output aggregation and formatting",
+            "Performance validation against processing time targets",
+            "Audio analysis quality validation"
+          ],
+          "completion_notes": ""
+        }
+      ]
+    },
+    {
+      "phase_id": 4,
+      "phase_name": "Complete Visual Pipeline",
+      "weeks": "Week 4-5",
+      "status": "not_done",
+      "items": [
+        {
+          "item_id": "4.1",
+          "title": "EasyOCR Text Extraction",
+          "description": "Implement GPU-based text extraction from video scenes",
+          "status": "not_done",
+          "feature_specs": ["easyocr-text"],
+          "deliverables": [
+            "EasyOCRService class from easyocr-text.md GPU pipeline implementation",
+            "Text overlay detection from easyocr-text.md scene processing approach",
+            "GPU coordination (Whisper→YOLO→EasyOCR) from easyocr-text.md sequential processing",
+            "Scene-based text analysis from easyocr-text.md context preservation",
+            "Text output formatting from easyocr-text.md structured results"
+          ],
+          "completion_notes": ""
+        },
+        {
+          "item_id": "4.2",
+          "title": "OpenCV Face Detection",
+          "description": "Implement CPU-based face detection integrated with object detection",
+          "status": "not_done",
+          "feature_specs": ["opencv-faces"],
+          "deliverables": [
+            "OpenCVService class from opencv-faces.md CPU pipeline implementation",
+            "Face detection integration from opencv-faces.md parallel processing approach",
+            "CPU pipeline coordination from opencv-faces.md resource management",
+            "Face/object detection correlation from opencv-faces.md integration patterns",
+            "Visual analysis aggregation from opencv-faces.md output compilation"
+          ],
+          "completion_notes": ""
+        },
+        {
+          "item_id": "4.3",
+          "title": "Complete Visual Pipeline Integration",
+          "description": "Integration testing of full visual analysis pipeline",
+          "status": "not_done",
+          "deliverables": [
+            "End-to-end visual pipeline validation (YOLO + EasyOCR + OpenCV)",
+            "GPU memory management across three visual tools",
+            "Visual output aggregation and formatting",
+            "Performance validation for complete 8-tool pipeline",
+            "Visual analysis quality validation"
+          ],
+          "completion_notes": ""
+        }
+      ]
+    },
+    {
+      "phase_id": 5,
+      "phase_name": "Production Readiness",
+      "weeks": "Week 5-6",
+      "status": "not_done",
+      "items": [
+        {
+          "item_id": "5.1",
+          "title": "Circuit Breaker Implementation",
+          "description": "Implement robust error handling and batch processing controls",
+          "status": "not_done",
+          "feature_specs": ["error-handling"],
+          "deliverables": [
+            "Circuit breaker pattern from error-handling.md fail-fast implementation",
+            "Per-video error isolation from error-handling.md video-level boundaries",
+            "Batch processing controls from error-handling.md 3-failure abort logic",
+            "GPU/FFmpeg error recovery from error-handling.md resource management",
+            "Error reporting and logging from error-handling.md diagnostic framework"
+          ],
+          "completion_notes": ""
+        },
+        {
+          "item_id": "5.2",
+          "title": "Claude Integration Handoff",
+          "description": "Implement seamless handoff to Claude for institutional knowledge synthesis",
+          "status": "not_done",
+          "feature_specs": ["claude-integration"],
+          "deliverables": [
+            "Build directory organization from claude-integration.md structured output approach",
+            "Claude synthesis handoff from claude-integration.md manual workflow integration",
+            "Institutional knowledge templates from claude-integration.md output formatting",
+            "Processing completion signals from claude-integration.md handoff triggers",
+            "Knowledge base generation workflow from claude-integration.md synthesis approach"
+          ],
+          "completion_notes": ""
+        },
+        {
+          "item_id": "5.3",
+          "title": "Production Deployment & Testing",
+          "description": "Final production testing, deployment preparation, and documentation",
+          "status": "not_done",
+          "deliverables": [
+            "100-video batch processing validation",
+            "End-to-end institutional knowledge extraction testing",
+            "Production deployment scripts and procedures",
+            "Complete documentation package for handoff",
+            "Performance benchmarking and optimization final validation"
+          ],
+          "completion_notes": ""
+        }
+      ]
+    }
+  ],
+  "status_definitions": {
+    "not_done": "Item has not been started",
+    "in_planning": "Planning work in progress, not yet complete", 
+    "in_progress": "Currently being worked on",
+    "human_review": "Technical work complete, awaiting human validation",
+    "completed": "Item fully completed and validated"
+  },
+  "navigation": {
+    "next_item": "1.1",
+    "next_item_title": "CLI Framework & FFmpeg Foundation",
+    "next_item_description": "Create Rich-based CLI interface and implement FFmpeg video/audio separation foundation",
+    "completion_percentage": 0
+  },
+  "success_metrics": {
+    "phase_1_complete": "Functional video analyzer with FFmpeg→Whisper→YOLO pipeline processing any video",
+    "phase_2_complete": "70x performance improvement achieved through scene-based processing with dual-pipeline coordination",
+    "phase_3_complete": "Complete audio institutional knowledge with transcription + music analysis + 68 audio features",
+    "phase_4_complete": "Complete 8-tool institutional knowledge pipeline with comprehensive visual and audio analysis",
+    "phase_5_complete": "Production-ready batch processing of 100+ video libraries with Claude synthesis handoff",
+    "technical_targets": {
+      "processing_time": "10 minutes average per video with scene-based optimization",
+      "performance_improvement": "70x improvement through representative frame analysis vs full-video processing",
+      "batch_reliability": "Process 100+ videos with circuit breaker after 3 consecutive failures",
+      "gpu_coordination": "Sequential GPU resource sharing across Whisper→YOLO→EasyOCR without memory conflicts",
+      "institutional_knowledge": "Scene-by-scene structured knowledge base with comprehensive AI analysis"
+    }
+  },
+  "development_strategy": {
+    "frontend_first": "Week 1 working CLI interface with mocks, Week 2 real FFmpeg integration prevents late UI issues",
+    "risk_stratification": "Low-risk FFmpeg foundation first, medium-risk GPU coordination, high-risk scene-based optimization with adequate time allocation",
+    "copy_first_innovation": "Leverage proven patterns from 6 reference codebases before implementing novel scene-based architecture",
+    "gpu_resource_management": "Sequential GPU tool coordination (Whisper→YOLO→EasyOCR) with clean memory lifecycle prevents CUDA conflicts",
+    "fail_fast_validation": "Per-video error isolation with circuit breaker ensures batch processing reliability for institutional use"
+  },
+  "resource_requirements": {
+    "development_time": "6 weeks with 15% contingency buffer",
+    "hardware": "RTX 5070 GPU for sequential AI processing, sufficient CPU for parallel audio analysis",
+    "dependencies": "FFmpeg, Python 3.11+, 7 AI tool stack (Whisper, YOLO, EasyOCR, LibROSA, pyAudioAnalysis, OpenCV, PySceneDetect)",
+    "storage": "Sufficient disk space for build/ directory intermediate files and output/ knowledge base",
+    "team": "Single developer with AI assistant support for systematic implementation"
+  },
+  "quality_gates": {
+    "phase_1_gate": "FFmpeg→Whisper→YOLO pipeline processes any video format with clean audio/video separation and basic AI analysis",
+    "phase_2_gate": "Scene-based processing achieves measurable performance improvement with maintained analysis quality",
+    "phase_3_gate": "Complete audio pipeline provides professional transcription + music analysis + comprehensive audio features",
+    "phase_4_gate": "8-tool pipeline provides comprehensive institutional knowledge with visual and audio analysis",
+    "phase_5_gate": "Batch processing of 100+ videos with reliable error handling and Claude synthesis handoff"
+  },
+  "dependencies": {
+    "external_dependencies": [
+      "FFmpeg installation and codec availability",
+      "CUDA drivers and GPU compatibility for AI tools",
+      "Python package dependencies from requirements.txt",
+      "Sufficient disk space for video processing and intermediate files"
+    ],
+    "internal_dependencies": [
+      "FFmpeg foundation must be complete before any AI tool integration",
+      "GPU coordination patterns established before adding additional GPU tools",
+      "Scene detection must work before dual-pipeline implementation",
+      "Error handling framework needed before production batch processing"
+    ],
+    "mitigation_plans": [
+      "FFmpeg compatibility testing with diverse video formats during foundation phase",
+      "GPU memory testing with sequential tool loading before full pipeline integration",
+      "Scene detection accuracy validation before performance optimization",
+      "Error scenario testing throughout development rather than only at end"
+    ]
+  }
+}
