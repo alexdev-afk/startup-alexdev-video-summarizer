@@ -138,7 +138,7 @@
           "item_id": "2.1",
           "title": "ASCII Wireframes & User Flow Design",
           "description": "Create text-based wireframes and user interaction flows for UI validation",
-          "status": "in_progress",
+          "status": "completed",
           "task_guide": "references/startup_tasks/2.1-ascii-wireframes-user-flow.md",
           "deliverables": [
             "ASCII wireframes for all major UI components and layouts",
@@ -147,7 +147,7 @@
             "Error state and edge case flow documentation",
             "Stakeholder review and feedback integration"
           ],
-          "completion_notes": "Interactive CLI wireframes and user flows completed through iterative design conversation. Created v1 (GUI concept) and v2 (final interactive CLI) wireframes with comprehensive user journey mapping. Validated non-interrupting batch processing approach, per-video output structure (output/{video-filename}/), and end-of-batch error handling. Complete user flows cover primary path, alternative paths, error recovery, edge cases, and administrative workflows. Component hierarchy established for Python CLI tool with step-by-step prompts. Technology confirmed as simple Python script with built-in libraries. Documented in references/mockups/ascii-wireframes/ and reports/startup/ascii-wireframes-2.1.md"
+          "completion_notes": "CLI interface wireframes completed through iterative user feedback design process. Created v1 (comprehensive interface) and v2 (simplified appliance approach) based on user request for maximum UI simplicity. Final design: 3-screen workflow (Launch → Processing → Complete) with all configuration externalized to YAML files. Appliance philosophy implemented: drop videos in input/, press ENTER, get knowledge base in output/. Key features: real-time 5-stage pipeline progress, config-driven operation (config/processing.yaml, config/paths.yaml), minimal user decisions (ENTER/Q/ESC only). Technical alignment with scene-based 7-tool architecture maintained while simplifying user experience. Error handling includes circuit breaker pattern with clear recovery options. Monospace Unicode formatting specifications for terminal implementation. Ready for technical implementation. Documented in references/mockups/ascii-wireframes/ and reports/startup/ascii-wireframes-2.1.md"
         },
         {
           "item_id": "2.2",

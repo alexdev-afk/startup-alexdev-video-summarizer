@@ -5,22 +5,22 @@
 **Status:** Completed
 
 ## Problem Statement
-Marketing teams are drowning in unlabeled video files with cryptic filenames, wasting hours re-watching content to understand existing assets, and accidentally creating duplicate work because they cannot discover what they already have. When the "video library expert" leaves the company, institutional knowledge walks out the door, leaving replacements unable to work effectively with hundreds or thousands of mystery video files.
+Internal team video library chaos - 100+ videos with no searchable structure, creating tribal knowledge dependency and workflow inefficiency for team content management and asset discovery.
 
 ## Target Users
-Marketing teams (2-10 people) at companies with large branded video asset libraries (100+ videos), particularly those where video organization has become dependent on one person's tribal knowledge.
+Internal team managing video library - specific internal use case for improving team workflow and video asset accessibility rather than external market opportunity.
 
 ## Solution Concept
-AI-powered batch video preprocessing tool that automatically converts video files into structured, searchable institutional knowledge through transcription and frame extraction, eliminating dependency on tribal knowledge and enabling seamless team transitions.
+Scene-by-scene rich analysis pipeline that transforms video chaos into searchable institutional knowledge through automated detection of objects, people, text, music, speakers, and visual elements per scene.
 
 ## Core Value Proposition
-Transform tribal video knowledge into institutional knowledge, ensuring team productivity doesn't crash when key personnel leave and enabling instant asset discovery instead of hours of manual re-watching.
+Transform video chaos into searchable institutional knowledge - enable instant discovery of any video content, eliminate search time waste, accelerate team member onboarding.
 
 ## Business Model Hypothesis
-Internal tool/consulting service focused on reliable batch processing without feature creep. Revenue through consulting engagements and custom implementations, with potential for broader market expansion after proven success with initial implementations.
+Internal tool for team productivity improvement - not for external sale, ROI measured in time savings, workflow optimization, and content reuse efficiency.
 
 ## Market Size Estimate
-Thousands of companies face the "video library expert dependency" problem. Any organization with 100+ marketing videos and small marketing teams represents a potential customer. Conservative estimate: 2,000+ mid-market companies with this specific pain point.
+100-video internal library with immediate, concrete need for searchable video knowledge management system.
 
 ## Technical Requirements (Refined)
 

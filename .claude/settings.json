@@ -1,0 +1,11 @@
+{
+  "allowed_tools": [
+    "Task",
+    "Glob", 
+    "Grep",
+    "Read",
+    "WebFetch",
+    "WebSearch",
+    "BashOutput"
+  ]
+}
