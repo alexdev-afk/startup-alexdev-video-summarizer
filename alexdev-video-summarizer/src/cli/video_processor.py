@@ -60,7 +60,7 @@ class VideoProcessorCLI:
         """Screen 1: Display discovered videos and get confirmation"""
         
         self.console.clear()
-        self.console.print("\n🎬 [bold blue]alexdev-video-summarizer[/bold blue]")
+        self.console.print("\n[bold blue]alexdev-video-summarizer[/bold blue]")
         self.console.print("Scene-based institutional knowledge extraction\n")
         
         # Discover videos
@@ -68,12 +68,12 @@ class VideoProcessorCLI:
         videos = discovery.find_videos()
         
         if not videos:
-            self.console.print(f"❌ No videos found in: {self.input_dir}")
+            self.console.print(f"[red]No videos found in: {self.input_dir}[/red]")
             self.console.print("   Supported formats: MP4, AVI, MOV, MKV, WebM")
             return []
             
         # Display video table
-        table = Table(title="📁 Discovered Videos")
+        table = Table(title="Discovered Videos")
         table.add_column("File", style="cyan")
         table.add_column("Size", justify="right")
         table.add_column("Duration", justify="right")
@@ -96,7 +96,7 @@ class VideoProcessorCLI:
         
         # Processing summary
         summary_panel = Panel(
-            f"📊 [bold]Processing Summary[/bold]\n"
+            f"[bold]Processing Summary[/bold]\n"
             f"• Videos: {len(videos)}\n"
             f"• Total Size: {total_size:.1f} MB\n"
             f"• Estimated Time: {estimated_time} minutes ({estimated_time/60:.1f} hours)\n"
@@ -107,7 +107,7 @@ class VideoProcessorCLI:
         self.console.print(summary_panel)
         
         # User confirmation
-        self.console.print("\n🚀 [bold]Ready to process videos?[/bold]")
+        self.console.print("\n[bold]Ready to process videos?[/bold]")
         self.console.print("   ENTER: Start processing")
         self.console.print("   Q: Quit")
         
@@ -116,7 +116,7 @@ class VideoProcessorCLI:
             if key == '' or key == 'y':
                 return videos
             elif key == 'q' or key == 'n':
-                self.console.print("👋 Processing cancelled")
+                self.console.print("[yellow]Processing cancelled[/yellow]")
                 return []
             else:
                 self.console.print("Please press ENTER to continue or Q to quit")

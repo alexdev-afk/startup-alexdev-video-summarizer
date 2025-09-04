@@ -1,39 +1,35 @@
-# Core Dependencies
-torch>=2.0.0
-torchvision>=0.15.0
-torchaudio>=2.0.0
-
-# Computer Vision & AI Tools
-ultralytics>=8.0.0          # YOLOv8
-opencv-python>=4.8.0        # OpenCV
-easyocr>=1.7.0              # Text extraction
-Pillow>=9.0.0               # Image processing
-
-# Audio Analysis
-whisperx>=3.1.0             # Enhanced Whisper with speaker ID
-librosa>=0.10.0             # Audio feature extraction
-pyAudioAnalysis>=0.3.0      # Comprehensive audio analysis
-soundfile>=0.12.0           # Audio file I/O
-
-# Video Processing
-scenedetect>=0.6.2          # Scene boundary detection
-imageio[ffmpeg]>=2.25.0     # Video I/O with FFmpeg
-
-# CLI & Configuration
-click>=8.1.0                # CLI framework
+# Phase 1: CLI Framework and Mock Services (Essential only)
+# CLI & Configuration - ACTIVE
+click>=8.1.0                # CLI framework  
 pyyaml>=6.0                 # YAML configuration
 rich>=13.0.0                # Enhanced CLI output
-tqdm>=4.65.0                # Progress bars
 
-# System & Utilities
+# Core Dependencies - FOR PHASE 2+
+# torch>=2.0.0
+# torchvision>=0.15.0  
+# torchaudio>=2.0.0
+
+# Computer Vision & AI Tools - FOR PHASE 2+
+# ultralytics>=8.0.0          # YOLOv8
+# opencv-python>=4.8.0        # OpenCV
+# easyocr>=1.7.0              # Text extraction
+# Pillow>=9.0.0               # Image processing
+
+# Audio Analysis - FOR PHASE 2+
+# whisperx>=3.1.0             # Enhanced Whisper with speaker ID
+# librosa>=0.10.0             # Audio feature extraction
+# pyAudioAnalysis>=0.3.0      # Comprehensive audio analysis
+# soundfile>=0.12.0           # Audio file I/O
+
+# Video Processing - FOR PHASE 2+
+# scenedetect>=0.6.2          # Scene boundary detection
+# imageio[ffmpeg]>=2.25.0     # Video I/O with FFmpeg
+
+# System & Utilities - ACTIVE FOR PHASE 1
 psutil>=5.9.0               # System monitoring
-pathlib                     # Path handling (built-in Python 3.4+)
-concurrent.futures          # Parallel processing (built-in Python 3.2+)
-json                        # JSON handling (built-in)
-datetime                    # Date/time utilities (built-in)
-gc                          # Garbage collection (built-in)
-os                          # Operating system interface (built-in)
-threading                   # Threading support (built-in)
+
+# Built-in modules (no installation needed):
+# pathlib, concurrent.futures, json, datetime, gc, os, threading
 
 # Development & Testing (optional)
 pytest>=7.0.0               # Testing framework

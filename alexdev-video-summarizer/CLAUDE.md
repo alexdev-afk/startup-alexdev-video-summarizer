@@ -1,6 +1,68 @@
-# Claude AI Assistant Developer Context - alexdev-video-summarizer
+# CLAUDE.md
 
-*This file provides comprehensive context for Claude AI assistants working on the alexdev-video-summarizer development project.*
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+*Comprehensive context for Claude AI assistants working on the alexdev-video-summarizer development project.*
+
+---
+
+## **Development Commands**
+
+### **Setup & Environment**
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Run main application
+python src/main.py --input input/ --output output/ --verbose
+
+# Run with dry-run to see what would be processed
+python src/main.py --dry-run --verbose
+
+# Use custom configuration
+python src/main.py --config config/processing.yaml --input input/ --output output/
+```
+
+### **Development & Testing**
+```bash
+# Code formatting
+black src/ tests/
+
+# Linting
+flake8 src/ tests/
+
+# Type checking
+mypy src/
+
+# Run tests
+pytest
+
+# Run tests with coverage
+pytest --cov=src tests/
+
+# Run single test
+pytest tests/test_specific.py::test_function_name -v
+```
+
+### **Project Structure**
+```
+src/
+├── main.py                    # CLI entry point
+├── cli/
+│   ├── __init__.py
+│   └── video_processor.py     # Rich-based CLI interface
+├── services/
+│   ├── __init__.py
+│   └── orchestrator.py        # Service coordination
+└── utils/                     # Configuration & logging utilities
+
+config/
+├── processing.yaml            # AI pipeline settings
+└── paths.yaml                # Directory configurations
+
+doc/dev/ROADMAP.json          # Development task management
+doc/arch/features/*.md        # Feature specifications (authoritative)
+```
 
 ---
 

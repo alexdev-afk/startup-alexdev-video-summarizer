@@ -15,8 +15,9 @@ from dataclasses import dataclass
 
 from services.ffmpeg_service import FFmpegService
 from services.scene_detection_service import SceneDetectionService
-from services.gpu_pipeline import GPUPipelineController
-from services.cpu_pipeline import CPUPipelineController
+from services.audio_pipeline import AudioPipelineController
+from services.gpu_pipeline import VideoGPUPipelineController
+from services.cpu_pipeline import VideoCPUPipelineController
 from services.knowledge_generator import KnowledgeBaseGenerator
 from utils.processing_context import VideoProcessingContext
 from utils.circuit_breaker import CircuitBreaker
@@ -42,8 +43,9 @@ class VideoProcessingOrchestrator:
         # Initialize services
         self.ffmpeg_service = FFmpegService(config)
         self.scene_service = SceneDetectionService(config)
-        self.gpu_pipeline = GPUPipelineController(config)
-        self.cpu_pipeline = CPUPipelineController(config)
+        self.audio_pipeline = AudioPipelineController(config)
+        self.video_gpu_pipeline = VideoGPUPipelineController(config)
+        self.video_cpu_pipeline = VideoCPUPipelineController(config)
         self.knowledge_generator = KnowledgeBaseGenerator(config)
         
         # Circuit breaker for batch processing
@@ -89,7 +91,7 @@ class VideoProcessingOrchestrator:
                 'scene_count': context.scene_data['scene_count']
             })
             
-            # Step 3: Per-Scene Processing (FAIL ON ANY TOOL FAILURE)
+            # Step 3: Per-Scene Processing (3 pipelines - FAIL ON ANY TOOL FAILURE)
             for i, scene in enumerate(context.scene_data['scenes'], 1):
                 progress_callback('scene_processing', {
                     'stage': 'starting',
@@ -97,24 +99,32 @@ class VideoProcessingOrchestrator:
                     'total_scenes': len(context.scene_data['scenes'])
                 })
                 
-                # GPU Pipeline: Sequential processing
-                gpu_results = self.gpu_pipeline.process_scene(scene, context)
-                progress_callback('gpu_pipeline', {
+                # Audio Pipeline: Whisper → LibROSA → pyAudioAnalysis
+                audio_results = self.audio_pipeline.process_scene(scene, context)
+                progress_callback('audio_pipeline', {
                     'stage': 'completed',
                     'scene': i,
-                    'results': gpu_results
+                    'results': audio_results
                 })
                 
-                # CPU Pipeline: Parallel processing
-                cpu_results = self.cpu_pipeline.process_scene(scene, context)
-                progress_callback('cpu_pipeline', {
+                # Video GPU Pipeline: YOLO → EasyOCR
+                video_gpu_results = self.video_gpu_pipeline.process_scene(scene, context)
+                progress_callback('video_gpu_pipeline', {
                     'stage': 'completed',
                     'scene': i,
-                    'results': cpu_results
+                    'results': video_gpu_results
                 })
                 
-                # Store combined results
-                context.store_scene_analysis(scene['scene_id'], gpu_results, cpu_results)
+                # Video CPU Pipeline: OpenCV
+                video_cpu_results = self.video_cpu_pipeline.process_scene(scene, context)
+                progress_callback('video_cpu_pipeline', {
+                    'stage': 'completed',
+                    'scene': i,
+                    'results': video_cpu_results
+                })
+                
+                # Store combined results from all 3 pipelines
+                context.store_scene_analysis(scene['scene_id'], audio_results, video_gpu_results, video_cpu_results)
                 
                 progress_callback('scene_processing', {
                     'stage': 'completed',
