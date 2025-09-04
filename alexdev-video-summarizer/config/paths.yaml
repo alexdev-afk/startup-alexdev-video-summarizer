@@ -1,0 +1,74 @@
+# Path Configuration
+# Directory structure and file patterns
+
+# Base Directories
+base:
+  project_root: "."
+  input_dir: "input"
+  output_dir: "output"
+  build_dir: "build"
+  
+# Processing Directories  
+processing:
+  models_dir: "models"
+  cache_dir: "cache"
+  temp_dir: "temp"
+  logs_dir: "logs"
+  
+# Build Structure (per video)
+build_structure:
+  video_subdir: "{video_name}"
+  audio_file: "audio.wav"
+  video_file: "video.mp4"
+  scenes_dir: "scenes"
+  analysis_dir: "analysis"
+  logs_dir: "logs"
+  
+# Scene Processing Paths
+scenes:
+  scene_file_pattern: "scene_{scene_id:03d}.mp4"
+  representative_frame_pattern: "frame_{scene_id:03d}.png"
+  metadata_file: "scene_metadata.json"
+  
+# Analysis Results Paths  
+analysis:
+  whisper_results: "whisper_results.json"
+  yolo_results: "yolo_results.json"
+  easyocr_results: "easyocr_results.json"
+  opencv_results: "opencv_results.json"
+  librosa_results: "librosa_results.json"
+  pyaudioanalysis_results: "pyaudioanalysis_results.json"
+  combined_analysis: "combined_analysis.json"
+  
+# Output Paths
+output:
+  knowledge_file_pattern: "{video_name}.md"
+  master_index: "INDEX.md"
+  processing_log: "processing_log.json"
+  
+# Log Files
+logging:
+  main_log: "processing.log"
+  error_log: "errors.log"
+  performance_log: "performance.log"
+  
+# Supported File Types
+file_types:
+  video_extensions:
+    - ".mp4"
+    - ".avi" 
+    - ".mov"
+    - ".mkv"
+    - ".webm"
+    - ".m4v"
+    
+  audio_extensions:
+    - ".wav"
+    - ".mp3"
+    - ".aac"
+    - ".flac"
+    
+  image_extensions:
+    - ".png"
+    - ".jpg"
+    - ".jpeg"

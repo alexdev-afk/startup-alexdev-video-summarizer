@@ -1,0 +1,174 @@
+# alexdev-video-summarizer Configuration
+# Scene-based institutional knowledge extraction settings
+
+# Application Settings
+app:
+  name: "alexdev-video-summarizer"
+  version: "1.0.0"
+  description: "Scene-based institutional knowledge extraction"
+
+# Directory Configuration
+paths:
+  input_dir: "input"
+  output_dir: "output" 
+  build_dir: "build"
+  models_dir: "models"
+  logs_dir: "logs"
+  temp_dir: "temp"
+
+# FFmpeg Settings
+ffmpeg:
+  # Audio extraction settings (optimized for Whisper)
+  audio:
+    sample_rate: 22050
+    bit_depth: 16
+    channels: 2
+    format: "wav"
+    codec: "pcm_s16le"
+  
+  # Video extraction settings  
+  video:
+    codec: "libx264"
+    quality: "high"
+    preserve_resolution: true
+    preserve_framerate: true
+    
+  # Hardware acceleration (auto-detect)
+  hardware_accel: "auto"
+  thread_count: "auto"
+
+# Scene Detection Settings
+scene_detection:
+  # PySceneDetect configuration
+  threshold: 27.0              # Content change threshold
+  min_scene_length: 2.0        # Minimum scene duration (seconds)
+  downscale_factor: 1          # 1 = full resolution analysis
+  frame_skip: 0                # Analyze every frame for accuracy
+  
+  # Fallback settings
+  fallback_to_time_based: true
+  time_based_scene_length: 120  # 2-minute fallback scenes
+
+# GPU Pipeline Configuration  
+gpu_pipeline:
+  # Sequential processing to prevent CUDA conflicts
+  sequential_processing: true
+  memory_cleanup: true
+  max_gpu_memory_usage: 0.9    # 90% GPU memory limit
+  
+  # YOLO Settings
+  yolo:
+    model: "yolov8n.pt"         # Nano model for speed
+    confidence_threshold: 0.5
+    device: "auto"              # auto, cuda, cpu
+    
+  # EasyOCR Settings
+  easyocr:
+    languages: ["en"]           # English text recognition
+    gpu: true
+    confidence_threshold: 0.5
+    
+  # Whisper Settings
+  whisper:
+    model_size: "large-v2"      # large-v2 for best accuracy
+    device: "auto"
+    language: "auto"            # Auto-detect language
+
+# CPU Pipeline Configuration
+cpu_pipeline:
+  # Parallel processing settings
+  max_workers: 3               # Thread pool size
+  timeout_seconds: 300         # 5 minute timeout per tool
+  
+  # OpenCV Settings
+  opencv:
+    face_detection:
+      scale_factor: 1.1
+      min_neighbors: 5
+      min_size: [30, 30]
+      
+  # LibROSA Settings  
+  librosa:
+    sample_rate: 22050
+    hop_length: 512
+    n_mfcc: 13
+    
+  # pyAudioAnalysis Settings
+  pyaudioanalysis:
+    window_size: 0.050          # 50ms windows
+    step_size: 0.025            # 25ms step size
+    features: "all"             # Extract all 68 features
+
+# Error Handling & Circuit Breaker
+error_handling:
+  # Circuit breaker configuration
+  circuit_breaker_threshold: 3  # Abort after 3 consecutive failures
+  
+  # Retry settings
+  max_retries: 1
+  retry_delay: 5               # seconds
+  
+  # Error recovery
+  continue_on_tool_failure: false  # Fail-fast approach
+  cleanup_failed_artifacts: true
+  
+  # GPU error handling
+  gpu_memory_recovery: true
+  cuda_cache_cleanup: true
+
+# Performance Settings
+performance:
+  # Processing targets
+  target_processing_time: 600  # 10 minutes per video
+  max_processing_time: 1800    # 30 minute timeout
+  
+  # Memory management
+  force_gc_after_video: true
+  gpu_memory_cleanup: true
+  
+  # Progress reporting
+  progress_update_interval: 5   # seconds
+  detailed_progress: true
+
+# Output Settings
+output:
+  # Knowledge base format
+  format: "markdown"
+  scene_by_scene: true
+  include_metadata: true
+  include_cross_references: true
+  
+  # File naming
+  filename_pattern: "{video_name}.md"
+  master_index: "INDEX.md"
+  
+  # Content options
+  include_timestamps: true
+  include_confidence_scores: false
+  max_scene_description_length: 500
+
+# Logging Configuration
+logging:
+  level: "INFO"                # DEBUG, INFO, WARNING, ERROR
+  file_logging: true
+  console_logging: true
+  log_format: "detailed"       # simple, detailed
+  
+  # Log file settings
+  max_log_size: "10MB"
+  backup_count: 3
+  
+  # Component logging levels
+  services:
+    ffmpeg: "INFO"
+    scene_detection: "INFO"
+    gpu_pipeline: "INFO"
+    cpu_pipeline: "INFO"
+    knowledge_generator: "INFO"
+
+# Development Settings (for testing)
+development:
+  mock_ai_services: false      # Use mock services for testing
+  skip_model_loading: false    # Skip actual model loading
+  fast_mode: false             # Reduced quality for faster testing
+  debug_artifacts: false       # Keep intermediate files for debugging
