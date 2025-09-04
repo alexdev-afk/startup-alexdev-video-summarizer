@@ -1,0 +1,347 @@
+{
+  "project": {
+    "name": "[PROJECT NAME]",
+    "description": "A comprehensive product development checklist from ideation to execution",
+    "version": "1.0.0",
+    "current_phase": 0,
+    "current_item": 1,
+    "last_updated": "[DATE]",
+    "git_protocol": {
+      "plan_context_prefix": "plan(scope): [description]",
+      "developer_context_prefix": "dev(scope): [description]",
+      "current_context": "plan",
+      "plan_scopes": ["validation", "roadmap", "docs", "framework", "template", "discovery"],
+      "developer_scopes": ["core", "ui", "api", "test", "config", "deploy", "docs", "fix", "feat", "refactor"],
+      "enforcement": "MANDATORY - All Claude instances must follow context-appropriate commit protocol"
+    }
+  },
+  "phases": [
+    {
+      "phase_id": 0,
+      "phase_name": "Repository Setup",
+      "status": "not_done",
+      "items": [
+        {
+          "item_id": "0.1",
+          "title": "Initialize Git Repository",
+          "description": "Set up version control and initial repository structure",
+          "status": "not_done",
+          "task_guide": "references/startup_tasks/0.1-initialize-git-repository.md",
+          "deliverables": [
+            "Git Repository Initialized: git init command executed successfully",
+            "Remote Origin Added: Connected to GitHub repository URL",
+            "Comprehensive .gitignore: Proper exclusions for Node.js, IDE, OS files",
+            "Local Configuration Excluded: .claude/ directory properly ignored",
+            "Initial Framework Commit: Startup validation framework committed with proper commit message format",
+            "Remote Repository Setup: Master branch pushed and tracking remote"
+          ],
+          "completion_notes": ""
+        }
+      ]
+    },
+    {
+      "phase_id": 1,
+      "phase_name": "Concept & Validation",
+      "status": "not_done",
+      "items": [
+        {
+          "item_id": "1.1",
+          "title": "Brief Ideation on Concept",
+          "description": "Help crystallize a vague idea into a clear problem/solution statement",
+          "status": "not_done",
+          "task_guide": "references/startup_tasks/1.1-brief-ideation-concept.md",
+          "deliverables": [
+            "Problem Statement: What specific problem are we solving?",
+            "Target Users: Who exactly experiences this problem?",
+            "Solution Concept: What's our proposed solution in one sentence?",
+            "Core Value Proposition: What's the main benefit to users?",
+            "Business Model Hypothesis: How will this make money?",
+            "Market Size Estimate: Is the addressable market large enough?"
+          ],
+          "completion_notes": ""
+        },
+        {
+          "item_id": "1.2",
+          "title": "Technical Feasibility Study",
+          "description": "Technical due diligence to prevent building impossible things",
+          "status": "not_done",
+          "task_guide": "references/startup_tasks/1.2-technical-feasibility-study.md",
+          "deliverables": [
+            "Core Technical Requirements: What are the must-have technical capabilities?",
+            "Technology Stack Assessment: What technologies/APIs/platforms are needed?",
+            "Integration Complexity: How complex are the required integrations?",
+            "Performance Requirements: What are the performance constraints?",
+            "Scalability Needs: What scale must the solution handle?",
+            "Risk Assessment: What are the highest technical risks?",
+            "Timeline Estimate: Rough estimate of development time",
+            "Success Probability: Overall technical feasibility (%)"
+          ],
+          "completion_notes": ""
+        },
+        {
+          "item_id": "1.3",
+          "title": "Study of Similar Professional-Grade Codebase",
+          "description": "Find and analyze existing solutions to learn proven patterns",
+          "status": "not_done",
+          "task_guide": "references/startup_tasks/1.3-study-similar-codebase.md",
+          "deliverables": [
+            "Reference Projects Identified: Found at least 1-2 similar existing projects",
+            "Reference Code Storage: Created references/[project-name]/ directory with complete codebase",
+            "Architecture Analysis: Studied and documented their technical approach",
+            "Code Quality Assessment: Evaluated their implementation quality",
+            "Integration Patterns: Understood how they solve similar problems",
+            "Strengths & Weaknesses: Identified what works well and what doesn't",
+            "Proven Patterns: Documented reusable architectural patterns",
+            "Analysis Documentation: Created references/[project-name]/analysis.md and patterns.md"
+          ],
+          "completion_notes": ""
+        },
+        {
+          "item_id": "1.4",
+          "title": "Similarities and Differences Analysis",
+          "description": "Strategic positioning relative to existing solutions",
+          "status": "not_done",
+          "task_guide": "references/startup_tasks/1.4-similarities-differences-analysis.md",
+          "deliverables": [
+            "Similarities Documented: What aspects are similar to reference projects?",
+            "Key Differences Identified: How does our solution differ?",
+            "Competitive Advantages: What makes our approach better/different?",
+            "Market Positioning: How do we position against existing solutions?",
+            "Unique Challenges: What problems are unique to our solution?"
+          ],
+          "completion_notes": ""
+        },
+        {
+          "item_id": "1.5",
+          "title": "Architecture Decisions Framework",
+          "description": "Help make informed technical architecture decisions",
+          "status": "not_done",
+          "task_guide": "references/startup_tasks/1.5-architecture-decisions-framework.md",
+          "deliverables": [
+            "Copy Decisions: What patterns/code will we directly adopt?",
+            "Deviation Decisions: What will we do differently and why?",
+            "Extension Decisions: What new capabilities will we add?",
+            "Technology Choices: Final decisions on tech stack",
+            "Integration Strategy: How we'll integrate with external systems",
+            "Scalability Plan: How the architecture will scale"
+          ],
+          "completion_notes": ""
+        }
+      ]
+    },
+    {
+      "phase_id": 2,
+      "phase_name": "Foundation & Planning",
+      "status": "not_done",
+      "items": [
+        {
+          "item_id": "2.1",
+          "title": "ASCII Wireframes & User Flow Design",
+          "description": "Create text-based wireframes and user interaction flows for UI validation",
+          "status": "not_done",
+          "task_guide": "references/startup_tasks/2.1-ascii-wireframes-user-flow.md",
+          "deliverables": [
+            "ASCII wireframes for all major UI components and layouts",
+            "User flow diagrams showing complete interaction paths", 
+            "Component hierarchy and relationship mapping",
+            "Error state and edge case flow documentation",
+            "Stakeholder review and feedback integration"
+          ],
+          "completion_notes": ""
+        },
+        {
+          "item_id": "2.2",
+          "title": "Interactive Mock using Tech Stack",
+          "description": "Build working HTML/CSS/JavaScript prototype using project tech stack for hands-on UI validation",
+          "status": "not_done",
+          "task_guide": "references/startup_tasks/2.2-interactive-mock-tech-stack.md",
+          "deliverables": [
+            "Interactive HTML mockup with platform styling",
+            "Working form components (inputs, buttons, loading states)",
+            "Simulated API interactions with realistic delays/responses", 
+            "Error handling and success flow demonstrations",
+            "Component extraction guide for production implementation",
+            "Mock project organized in /references/2.2-interactive-mock-tech-stack/",
+            "Completion report documenting mock validation results"
+          ],
+          "completion_notes": ""
+        },
+        {
+          "item_id": "2.3",
+          "title": "Feature & Implementation Specification",
+          "description": "Create implementation blueprint through interactive architectural decision-making that eliminates development uncertainty",
+          "status": "not_done",
+          "task_guide": "references/startup_tasks/2.3-feature-implementation-specification.md",
+          "deliverables": [
+            "Multi-Context Task Management: Create temporal TODO.md to track subtask progress across context resets",
+            "Interactive Architecture Sessions: Present architectural decisions to user for discussion and approval before finalizing",
+            "Features Overview: /project-name/doc/arch/features.md overview document with feature summary and navigation",
+            "Individual Feature Specifications: /project-name/doc/arch/features/ directory with individual feature specification files",
+            "Complete Feature Specification: Every user-facing feature fully defined with workflows in separate files",
+            "User Experience Design: Detailed interface mockups, error handling, professional workflow design",
+            "Technical Architecture: Production-ready code examples, service patterns, security framework",
+            "Integration Specifications: Platform-specific hooks, API contracts, data processing patterns",
+            "Frontend-First Implementation: Mock-to-real strategy with progressive enhancement approach",
+            "Security by Design: Enterprise-grade protection designed into architecture from start",
+            "Business Model Alignment: Technical decisions consistently support revenue model"
+          ],
+          "completion_notes": ""
+        },
+        {
+          "item_id": "2.4",
+          "title": "Create Project Skeleton",
+          "description": "Create the actual project structure with directories, files, and operational documentation framework informed by validated specifications",
+          "status": "not_done",
+          "task_guide": "references/startup_tasks/2.4-create-project-skeleton.md",
+          "deliverables": [
+            "Actual Project Directory: Create /project-name/ with complete folder structure and placeholder files",
+            "Build System Structure: Create /build/, /dist/, /scripts/ directories with proper .gitignore configuration",
+            "Architecture Documentation: Create /project-name/doc/arch/ with system design documentation",
+            "Directory Structure: Organized file and folder structure following platform conventions",
+            "Naming Conventions: Consistent naming standards with examples",
+            "Development Environment: Local development setup requirements and scripts",
+            "Version Control: Repository structure and branching strategy",
+            "Code Standards: Platform-specific coding style and quality guidelines with examples",
+            "Security Framework: Security practices and requirements with working examples",
+            "Asset Organization: Frontend assets structure with build configuration",
+            "Service Architecture: Dependency injection and service patterns with placeholder implementations",
+            "Operational Documentation: Complete doc/arch/, doc/dev/, doc/sysops/ structure with content",
+            "Development Reports Structure: /project-name/doc/dev/reports/ directory for development phase completion reports",
+            "Completion Report: Document what was created and implementation guidance"
+          ],
+          "completion_notes": ""
+        },
+        {
+          "item_id": "2.5",
+          "title": "Operational Documentation & Runbooks",
+          "description": "Create comprehensive operational documentation for development and deployment",
+          "status": "not_done",
+          "task_guide": "references/startup_tasks/2.5-operational-documentation-runbooks.md",
+          "deliverables": [
+            "Development Runbook: Complete development environment setup, workflow, debugging guide",
+            "Build & Deployment Procedures: Build pipeline processes, artifact management workflows, deployment packaging procedures",
+            "Deployment Runbook: Installation, configuration, troubleshooting, monitoring procedures",
+            "Architecture Documentation: System design, component interactions, data flow, extension points",
+            "Maintenance Procedures: Regular maintenance tasks, performance monitoring, update processes",
+            "Quality Assurance: Testing procedures, code quality gates, release validation",
+            "Emergency Procedures: Incident response, rollback procedures, data recovery processes"
+          ],
+          "completion_notes": ""
+        },
+        {
+          "item_id": "2.6",
+          "title": "Detailed Technical Roadmap",
+          "description": "Create realistic, actionable execution plan with anti-pattern prevention",
+          "status": "not_done",
+          "task_guide": "references/startup_tasks/2.6-detailed-technical-roadmap.md",
+          "deliverables": [
+            "Phase Breakdown: Development phases with weekly milestones (6-8 week typical)",
+            "Frontend-First Timeline: Week 1 working UI with mocks, Week 2 real integration",
+            "Risk-Stratified Schedule: Low-risk foundation copying, medium-risk innovation, high-risk integration",
+            "Resource Requirements: Team, tools, budget with 15-20% contingency buffer",
+            "Success Metrics: Technical (performance), UX (workflow), business (validation) benchmarks",
+            "Quality Gates: Checkpoint criteria for each development phase",
+            "Dependencies: Prerequisites and external dependencies with mitigation plans",
+            "ROADMAP.json File: Use template at /references/templates/ROADMAP.json to create clean, machine-readable /project-name/doc/dev/ROADMAP.json following STARTUP_ROADMAP.json structure pattern for project-specific CLAUDE.md execution tracking"
+          ],
+          "completion_notes": ""
+        },
+        {
+          "item_id": "2.7",
+          "title": "AI Assistant Context File (CLAUDE.md)",
+          "description": "Create comprehensive context for future Claude instances",
+          "status": "not_done",
+          "task_guide": "references/startup_tasks/2.7-ai-assistant-context-file.md",
+          "deliverables": [
+            "Project Overview: Complete background, value proposition, target users, business model",
+            "Technical Architecture: Service patterns, proven implementations, copy/adapt/extend decisions",
+            "Development Strategy: Frontend-first approach, anti-pattern prevention, risk mitigation strategies",
+            "Code Standards: Platform-specific guidelines, security practices, performance requirements",
+            "Integration Requirements: External APIs, platform hooks, data processing patterns with working examples",
+            "Domain Knowledge: Business logic, user workflows, success metrics, market positioning",
+            "Production Code Examples: Copy-paste ready implementations for immediate AI productivity",
+            "Business Context: Market positioning, competitive landscape, business model alignment"
+          ],
+          "completion_notes": ""
+        }
+      ]
+    },
+    {
+      "phase_id": 3,
+      "phase_name": "Execution Readiness",
+      "status": "not_done",
+      "items": [
+        {
+          "item_id": "3.1",
+          "title": "Pre-Development Checklist",
+          "description": "Ensure everything is ready for successful execution with complete operational foundation",
+          "status": "not_done",
+          "task_guide": "references/startup_tasks/3.1-pre-development-checklist.md",
+          "deliverables": [
+            "Development Environment Ready: All tools and dependencies installed",
+            "Team Alignment: All team members understand the plan and operational procedures",
+            "Resource Allocation: Time, budget, and team resources confirmed",
+            "Success Criteria Defined: Clear definition of MVP completion",
+            "Testing Strategy: Plan for validation and quality assurance",
+            "Feedback Loops: How we'll collect and incorporate feedback",
+            "Risk Monitoring: How we'll track and respond to issues",
+            "Operational Readiness: Runbooks tested, deployment procedures validated",
+            "Documentation Complete: All development and operational documentation ready"
+          ],
+          "completion_notes": ""
+        }
+      ]
+    },
+    {
+      "phase_id": 4,
+      "phase_name": "MVP Execution",
+      "status": "not_done",
+      "items": [
+        {
+          "item_id": "4.1",
+          "title": "Execute MVP Development",
+          "description": "Execute the planned MVP development in phases",
+          "status": "not_done",
+          "task_guide": "references/startup_tasks/4.1-execute-mvp-development.md",
+          "deliverables": [
+            "Week 1-2 Foundation: Plugin scaffold creation, Settings page implementation, API integration, Basic security measures",
+            "Week 3-4 Core Processing: Data extraction, AI context generation, Response validation, Update system",
+            "Week 5-6 Integration: UI implementation, AJAX request handling, Live updates, User experience polish",
+            "Week 7-8 Testing & Launch: Compatibility testing, Bug fixes and optimization, Documentation completion, Beta user testing"
+          ],
+          "completion_notes": ""
+        }
+      ]
+    }
+  ],
+  "status_definitions": {
+    "not_done": "Item has not been started",
+    "in_planning": "Planning work in progress, not yet complete",
+    "in_progress": "Currently being worked on",
+    "human_review": "Technical work complete, awaiting human validation",
+    "completed": "Item fully completed and validated"
+  },
+  "navigation": {
+    "next_item": "0.1",
+    "next_item_title": "Initialize Git Repository", 
+    "next_item_description": "Start by setting up version control and repository structure",
+    "completion_percentage": 0
+  },
+  "completion_criteria": {
+    "phase_0_complete": "Repository initialized, .gitignore configured, initial framework committed and pushed",
+    "phase_1_complete": "Problem/solution fit clear, technical feasibility confirmed, differentiation strategy defined",
+    "phase_2_complete": "Technical foundation designed, comprehensive documentation created, execution plan ready",
+    "phase_3_complete": "All prerequisites met, team ready, resources allocated",
+    "ready_for_execution": "All items marked 'completed', user confident in plan, technical approach validated, resources committed"
+  },
+  "anti_patterns_to_avoid": [
+    "Rushing to Code: Skipping validation phases, starting development before architecture is clear",
+    "Over-Planning: Analysis paralysis, perfect planning instead of good enough planning",
+    "Under-Planning: Skipping technical feasibility study, inadequate architecture decisions",
+    "Poor Documentation: Not documenting decisions and rationale, inadequate context for team members"
+  ],
+  "success_indicators": {
+    "good_planning": "Clear problem statement, high-confidence technical feasibility, well-researched competitive landscape, thoughtful architecture decisions",
+    "ready_for_execution": "Team excitement and alignment, clear understanding of next steps, minimal unknowns, realistic expectations, resources committed"
+  }
+}

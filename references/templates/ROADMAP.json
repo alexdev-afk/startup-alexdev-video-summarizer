@@ -1,0 +1,144 @@
+{
+  "project": {
+    "name": "[PROJECT_NAME]",
+    "description": "[PROJECT_DESCRIPTION]",
+    "version": "1.0.0",
+    "current_phase": 1,
+    "current_item": 1,
+    "last_updated": "[DATE]"
+  },
+  "phases": [
+    {
+      "phase_id": 1,
+      "phase_name": "[PHASE_1_NAME]",
+      "weeks": "[PHASE_1_WEEKS]",
+      "status": "not_done",
+      "items": [
+        {
+          "item_id": "1.1",
+          "title": "[ITEM_1_TITLE]",
+          "description": "[ITEM_1_DESCRIPTION]",
+          "status": "not_done",
+          "feature_specs": ["[FEATURE_SPEC_ID]"],
+          "deliverables": [
+            "[DELIVERABLE_1 - reference to specific feature spec section]",
+            "[DELIVERABLE_2 - from FEATURE_SPEC_ID]",
+            "[DELIVERABLE_3 - following FEATURE_SPEC_ID implementation]",
+            "[DELIVERABLE_4 - as defined in FEATURE_SPEC_ID]"
+          ],
+          "completion_notes": ""
+        },
+        {
+          "item_id": "1.2", 
+          "title": "[ITEM_2_TITLE]",
+          "description": "[ITEM_2_DESCRIPTION]",
+          "status": "not_done",
+          "feature_specs": ["[FEATURE_SPEC_ID]", "[ADDITIONAL_FEATURE_SPEC]"],
+          "deliverables": [
+            "[DELIVERABLE_1 - from FEATURE_SPEC_ID]",
+            "[DELIVERABLE_2 - following ADDITIONAL_FEATURE_SPEC]",
+            "[DELIVERABLE_3 - as defined in FEATURE_SPEC_ID]",
+            "[DELIVERABLE_4 - implementing FEATURE_SPEC requirements]"
+          ],
+          "completion_notes": ""
+        },
+        {
+          "item_id": "1.3",
+          "title": "[ITEM_3_TITLE]",
+          "description": "[ITEM_3_DESCRIPTION]",
+          "status": "not_done",
+          "deliverables": [
+            "[DELIVERABLE_1]",
+            "[DELIVERABLE_2]",
+            "[DELIVERABLE_3]",
+            "[DELIVERABLE_4]"
+          ],
+          "completion_notes": ""
+        }
+      ]
+    },
+    {
+      "phase_id": 2,
+      "phase_name": "[PHASE_2_NAME]",
+      "weeks": "[PHASE_2_WEEKS]", 
+      "status": "not_done",
+      "items": [
+        {
+          "item_id": "2.1",
+          "title": "[ITEM_2.1_TITLE]",
+          "description": "[ITEM_2.1_DESCRIPTION]",
+          "status": "not_done",
+          "deliverables": [
+            "[DELIVERABLE_1]",
+            "[DELIVERABLE_2]",
+            "[DELIVERABLE_3]",
+            "[DELIVERABLE_4]"
+          ],
+          "completion_notes": ""
+        },
+        {
+          "item_id": "2.2",
+          "title": "[ITEM_2.2_TITLE]",
+          "description": "[ITEM_2.2_DESCRIPTION]",
+          "status": "not_done",
+          "deliverables": [
+            "[DELIVERABLE_1]",
+            "[DELIVERABLE_2]",
+            "[DELIVERABLE_3]",
+            "[DELIVERABLE_4]"
+          ],
+          "completion_notes": ""
+        }
+      ]
+    },
+    {
+      "phase_id": 3,
+      "phase_name": "[PHASE_3_NAME]", 
+      "weeks": "[PHASE_3_WEEKS]",
+      "status": "not_done",
+      "items": [
+        {
+          "item_id": "3.1",
+          "title": "[ITEM_3.1_TITLE]",
+          "description": "[ITEM_3.1_DESCRIPTION]",
+          "status": "not_done",
+          "deliverables": [
+            "[DELIVERABLE_1]",
+            "[DELIVERABLE_2]",
+            "[DELIVERABLE_3]",
+            "[DELIVERABLE_4]"
+          ],
+          "completion_notes": ""
+        }
+      ]
+    }
+  ],
+  "status_definitions": {
+    "not_done": "Item has not been started",
+    "in_planning": "Planning work in progress, not yet complete", 
+    "in_progress": "Currently being worked on",
+    "human_review": "Technical work complete, awaiting human validation",
+    "completed": "Item fully completed and validated"
+  },
+  "navigation": {
+    "next_item": "1.1",
+    "next_item_title": "[FIRST_ITEM_TITLE]",
+    "next_item_description": "[FIRST_ITEM_DESCRIPTION]",
+    "completion_percentage": 0
+  },
+  "success_metrics": {
+    "phase_1_complete": "[PHASE_1_SUCCESS_CRITERIA]",
+    "phase_2_complete": "[PHASE_2_SUCCESS_CRITERIA]",  
+    "phase_3_complete": "[PHASE_3_SUCCESS_CRITERIA]",
+    "technical_targets": {
+      "[TARGET_1_NAME]": "[TARGET_1_VALUE]",
+      "[TARGET_2_NAME]": "[TARGET_2_VALUE]",
+      "[TARGET_3_NAME]": "[TARGET_3_VALUE]"
+    }
+  },
+  "development_strategy": {
+    "[STRATEGY_1_NAME]": "[STRATEGY_1_DESCRIPTION]",
+    "[STRATEGY_2_NAME]": "[STRATEGY_2_DESCRIPTION]",
+    "[STRATEGY_3_NAME]": "[STRATEGY_3_DESCRIPTION]"
+  }
+}

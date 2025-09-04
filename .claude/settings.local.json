@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(/C:\\n8n_shared\\dev\\alexdev-video-summarizer/**)",
+      "Read(/C:\\n8n_shared\\dev\\alexdev-video-summarizer/**)",
+      "Read(/C:\\n8n_shared\\dev\\alexdev-video-summarizer\\references\\startup_tasks/**)",
+      "Read(/C:\\n8n_shared\\dev\\alexdev-video-summarizer/**)",
+      "Read(/C:\\n8n_shared\\dev\\alexdev-video-summarizer\\references\\startup_tasks/**)",
+      "WebSearch",
+      "Read(/C:\\n8n_shared\\dev\\alexdev-video-summarizer\\references\\startup_tasks/**)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Read(/C:\\n8n_shared\\dev\\alexdev-video-summarizer\\references\\ffmpeg-napoleon-scripts/**)",
+      "Read(/C:\\n8n_shared\\dev\\alexdev-video-summarizer\\references\\whisper-transcriber/**)",
+      "Read(/C:\\n8n_shared\\dev\\alexdev-video-summarizer\\references\\ffmpeg-napoleon-scripts/**)",
+      "Read(/C:\\n8n_shared\\dev\\alexdev-video-summarizer\\references\\ffmpeg-napoleon-scripts/**)",
+      "Read(/C:\\n8n_shared\\dev\\alexdev-video-summarizer\\references\\whisper-transcriber/**)",
+      "Read(/C:\\n8n_shared\\dev\\alexdev-video-summarizer\\references\\ffmpeg-napoleon-scripts/**)",
+      "Read(/C:\\n8n_shared\\dev\\alexdev-video-summarizer\\references\\ffmpeg-napoleon-scripts/**)",
+      "Read(/C:\\n8n_shared\\dev\\alexdev-video-summarizer\\references\\whisper-transcriber\\whisper_transcriber/**)",
+      "Read(/C:\\n8n_shared\\dev\\alexdev-video-summarizer\\references\\startup_tasks/**)",
+      "Bash(git init:*)",
+      "Bash(git add:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
