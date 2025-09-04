@@ -298,30 +298,27 @@ output/
 - Related topics: [videos with similar text/objects]
 ```
 
-### **Knowledge Synthesis Pipeline**
-- **Approach**: Single LLM call per video for comprehensive synthesis
-- **Input**: All 7 tool outputs + scene context in structured JSON format
-- **Processing**: ~500-1000 lines of tool data synthesized into human-readable knowledge
-- **Output**: Single cohesive .md file optimized for institutional knowledge discovery
-- **Rationale**: Data volume manageable, simpler architecture, fewer failure points
+### **Knowledge Synthesis Pipeline** ⭐ **CLAUDE-NATIVE ARCHITECTURE**
+- **Approach**: Claude-operated synthesis using TodoWrite + Task subagents per video
+- **Trigger**: CLI completion message → Claude creates synthesis todos
+- **Input**: Claude reads structured build/ directory files directly
+- **Processing**: Systematic TodoWrite workflow with subagent synthesis per video
+- **Output**: Single cohesive .md file per video optimized for institutional knowledge discovery
+- **Rationale**: Simpler architecture, no API calls, systematic progress tracking, natural Claude workflow
 
 ```python
-# Knowledge synthesis approach
-def synthesize_video_knowledge(video_analysis_data):
-    # Combine all tool outputs into structured prompt
-    synthesis_data = {
-        "scenes": scene_analysis_results,      # PySceneDetect + per-scene tool outputs
-        "audio_transcript": whisperx_results,  # Enhanced transcription + speakers
-        "audio_features": librosa_pyaudio_results,  # Audio analysis
-        "video_metadata": processing_metadata
-    }
+# CLI completion trigger (replaces API synthesis)
+def complete_processing():
+    print("🎉 ALL PROCESSING COMPLETE - READY FOR SYNTHESIS")
+    print("📋 Claude: Please create TodoWrite for video synthesis tasks")
+    # Claude creates todos for each video in build/ directory
+    # Uses Task tool with subagents for systematic synthesis
     
-    # Single Claude call for comprehensive synthesis
-    knowledge_base = claude_synthesize(
-        "Transform this technical analysis into searchable institutional knowledge",
-        synthesis_data
-    )
-    return knowledge_base  # Human-readable .md file
+# Claude workflow (replaces claude_synthesize function):
+# 1. TodoWrite: Create synthesis task per video
+# 2. Task tool: Launch subagent per video 
+# 3. Subagent: Read build/video-filename/* → Write output/video-filename.md
+# 4. Mark todo complete, move to next video
 ```
 
 ### **Circuit Breaker Pattern**

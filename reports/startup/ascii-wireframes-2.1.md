@@ -31,8 +31,8 @@ Successfully designed CLI interface wireframes through iterative user feedback, 
 
 ### **Three-Screen Workflow**
 1. **Launch**: Shows found videos, estimated time, single ENTER to start
-2. **Processing**: Real-time progress with 5-stage pipeline view
-3. **Complete**: Results summary with option to process more
+2. **Processing**: Real-time progress with 7-tool pipeline view per video
+3. **Complete**: Claude synthesis handoff message with build/ directory ready
 
 ### **Configuration Architecture**
 - **config/processing.yaml**: All tool settings and processing parameters
@@ -52,7 +52,7 @@ Successfully designed CLI interface wireframes through iterative user feedback, 
 ### **Progress Communication**
 - **Time estimates**: Clear processing duration and remaining time
 - **Current activity**: Human-readable status ("Conference room discussion")
-- **Pipeline stages**: Simplified 5-stage view vs. complex 7-tool display
+- **Pipeline stages**: Simplified 7-tool progress view with clear completion handoff to Claude
 
 ---
 
