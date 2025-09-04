@@ -11,7 +11,7 @@ from typing import Dict, Any, List, Optional, Tuple
 import time
 
 try:
-    from scenedetect import VideoManager, SceneManager, ContentDetector
+    from scenedetect import detect, ContentDetector
     SCENEDETECT_AVAILABLE = True
 except ImportError:
     SCENEDETECT_AVAILABLE = False
@@ -117,7 +117,7 @@ class SceneDetectionService:
     
     def _detect_scenes(self, video_path: Path) -> Tuple[List, float]:
         """
-        Detect scene boundaries using PySceneDetect ContentDetector
+        Detect scene boundaries using PySceneDetect modern API
         
         Args:
             video_path: Path to video file
@@ -125,33 +125,23 @@ class SceneDetectionService:
         Returns:
             Tuple of (scene_list, fps)
         """
-        video_manager = VideoManager([str(video_path)])
-        scene_manager = SceneManager()
-        
-        # Add ContentDetector with configured threshold
-        scene_manager.add_detector(
-            ContentDetector(
-                threshold=self.threshold,
-                min_scene_len=self.min_scene_length
-            )
+        # Use modern detect() function - much simpler than VideoManager
+        scene_list = detect(
+            str(video_path), 
+            ContentDetector(threshold=self.threshold)
         )
         
-        # Set processing parameters
-        if self.downscale_factor > 1:
-            video_manager.set_downscale_factor(self.downscale_factor)
+        # Get video info with OpenCV  
+        import cv2
+        cap = cv2.VideoCapture(str(video_path))
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        frame_count = cap.get(cv2.CAP_PROP_FRAME_COUNT)
+        cap.release()
         
-        try:
-            # Start video manager and detect scenes
-            video_manager.start()
-            scene_manager.detect_scenes(frame_source=video_manager, frame_skip=self.frame_skip)
-            
-            scene_list = scene_manager.get_scene_list()
-            fps = video_manager.get_framerate()
-            
-            return scene_list, fps
-            
-        finally:
-            video_manager.release()
+        if fps <= 0:
+            fps = 30.0  # Fallback FPS
+        
+        return scene_list, fps
     
     def _process_scene_boundaries(self, scene_list: List, fps: float) -> List[Dict[str, Any]]:
         """
@@ -231,11 +221,18 @@ class SceneDetectionService:
         """
         logger.info(f"Using time-based scene splitting: {self.time_based_scene_length}s intervals")
         
-        # For fallback, we'll create 3 scenes of equal duration
-        # In a real implementation, this would get actual video duration
-        total_duration = 360.0  # Assume 6 minutes for fallback
+        # Get actual video duration with OpenCV
+        import cv2
+        cap = cv2.VideoCapture(str(video_path))
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        frame_count = cap.get(cv2.CAP_PROP_FRAME_COUNT)
+        cap.release()
+        
+        if fps <= 0:
+            fps = 30.0  # Fallback FPS
+        
+        total_duration = frame_count / fps if frame_count > 0 else 360.0
         scene_duration = self.time_based_scene_length
-        fps = 30.0  # Assume 30 FPS
         
         boundaries = []
         scene_count = int(total_duration // scene_duration) + (1 if total_duration % scene_duration > 0 else 0)
