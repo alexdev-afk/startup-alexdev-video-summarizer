@@ -36,6 +36,9 @@ class FFmpegService:
         self.ffmpeg_config = config.get('ffmpeg', {})
         self.paths_config = config.get('paths', {})
         
+        # Determine FFmpeg executable path
+        self.ffmpeg_path = self._find_ffmpeg_executable()
+        
         # Verify FFmpeg is available
         self.verify_ffmpeg_availability()
         
@@ -43,6 +46,25 @@ class FFmpegService:
         self.build_dir = Path(self.paths_config.get('build_dir', 'build'))
         self.build_dir.mkdir(exist_ok=True)
         
+    def _find_ffmpeg_executable(self) -> str:
+        """Find FFmpeg executable path"""
+        import platform
+        
+        # Try common Windows paths first
+        if platform.system() == 'Windows':
+            # WinGet installation path
+            winget_path = Path.home() / "AppData/Local/Microsoft/WinGet/Packages/Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe/ffmpeg-8.0-full_build/bin/ffmpeg.exe"
+            if winget_path.exists():
+                return str(winget_path)
+            
+            # WinGet Links path
+            links_path = Path.home() / "AppData/Local/Microsoft/WinGet/Links/ffmpeg.exe"
+            if links_path.exists():
+                return str(links_path)
+        
+        # Default to PATH lookup
+        return 'ffmpeg'
+    
     def verify_ffmpeg_availability(self):
         """Verify FFmpeg is installed and accessible"""
         # Skip FFmpeg check in development mode
@@ -52,15 +74,15 @@ class FFmpegService:
             
         try:
             result = subprocess.run(
-                ['ffmpeg', '-version'], 
+                [self.ffmpeg_path, '-version'], 
                 capture_output=True, 
                 text=True,
                 check=True
             )
-            logger.info("FFmpeg verification successful")
+            logger.info(f"FFmpeg verification successful: {self.ffmpeg_path}")
         except (subprocess.CalledProcessError, FileNotFoundError) as e:
             raise FFmpegError(
-                "FFmpeg not found or not working. Please install FFmpeg and add it to PATH."
+                f"FFmpeg not found or not working at: {self.ffmpeg_path}. Please check installation."
             ) from e
     
     def extract_streams(self, video_path: Path) -> Tuple[Path, Path]:
@@ -110,7 +132,7 @@ class FFmpegService:
         audio_config = self.ffmpeg_config.get('audio', {})
         
         cmd = [
-            'ffmpeg', '-y',  # Overwrite output
+            self.ffmpeg_path, '-y',  # Overwrite output
             '-i', str(video_path),
             '-vn',  # No video
             '-acodec', audio_config.get('codec', 'pcm_s16le'),
@@ -141,7 +163,7 @@ class FFmpegService:
         video_config = self.ffmpeg_config.get('video', {})
         
         cmd = [
-            'ffmpeg', '-y',  # Overwrite output
+            self.ffmpeg_path, '-y',  # Overwrite output
             '-i', str(video_path),
             '-an',  # No audio
             '-vcodec', video_config.get('codec', 'libx264'),
@@ -229,7 +251,7 @@ class FFmpegService:
     def _extract_scene(self, video_path: Path, scene_file: Path, start_seconds: float, end_seconds: Optional[float]):
         """Extract a single scene from video"""
         cmd = [
-            'ffmpeg', '-y',
+            self.ffmpeg_path, '-y',
             '-i', str(video_path),
             '-ss', str(start_seconds)
         ]
@@ -280,8 +302,11 @@ class FFmpegService:
         Returns:
             Dictionary with video information
         """
+        # Use ffprobe from same directory as ffmpeg
+        ffprobe_path = self.ffmpeg_path.replace('ffmpeg.exe', 'ffprobe.exe') if 'ffmpeg.exe' in self.ffmpeg_path else self.ffmpeg_path.replace('ffmpeg', 'ffprobe')
+        
         cmd = [
-            'ffprobe', '-v', 'quiet',
+            ffprobe_path, '-v', 'quiet',
             '-print_format', 'json',
             '-show_format', '-show_streams',
             str(video_path)

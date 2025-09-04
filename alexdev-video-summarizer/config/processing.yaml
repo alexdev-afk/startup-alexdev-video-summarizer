@@ -170,6 +170,6 @@ logging:
 development:
   mock_ai_services: true       # Use mock services for testing (PHASE 1)
   skip_model_loading: true     # Skip actual model loading (PHASE 1) 
-  skip_ffmpeg_check: true      # Skip FFmpeg verification for testing (PHASE 1)
+  skip_ffmpeg_check: false     # FFmpeg is now installed and ready
   fast_mode: true              # Reduced quality for faster testing (PHASE 1)
   debug_artifacts: true        # Keep intermediate files for debugging (PHASE 1)

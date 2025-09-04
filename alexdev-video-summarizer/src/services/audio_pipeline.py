@@ -1,13 +1,15 @@
 """
 Audio Pipeline Controller for sequential audio processing.
 
-Mock implementation for Phase 1 - handles Whisper → LibROSA → pyAudioAnalysis.
+Handles Whisper → LibROSA → pyAudioAnalysis pipeline.
 Sequential processing of audio content per scene.
 """
 
 import time
+from pathlib import Path
 from typing import Dict, Any
 
+from services.whisper_service import WhisperService, WhisperError
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -26,11 +28,14 @@ class AudioPipelineController:
         self.config = config
         self.audio_config = config.get('audio_pipeline', {})
         
-        logger.info("Audio pipeline controller initialized (MOCK MODE)")
+        # Initialize services
+        self.whisper_service = WhisperService(config)
+        
+        logger.info("Audio pipeline controller initialized")
     
     def process_scene(self, scene: Dict[str, Any], context) -> Dict[str, Any]:
         """
-        Process scene through Audio pipeline (MOCK IMPLEMENTATION)
+        Process scene through Audio pipeline
         
         Sequential processing: Whisper → LibROSA → pyAudioAnalysis
         
@@ -42,45 +47,68 @@ class AudioPipelineController:
             Combined audio analysis results
         """
         scene_id = scene['scene_id']
-        logger.info(f"Processing scene {scene_id} through Audio pipeline (MOCK)")
+        logger.info(f"Processing scene {scene_id} through Audio pipeline")
         
-        # Sequential audio processing simulation
         results = {}
         
-        # Step 1: Whisper transcription
-        results['whisper'] = self._mock_whisper_processing(scene, context)
-        
-        # Step 2: LibROSA music analysis
-        results['librosa'] = self._mock_librosa_processing(scene, context)
-        
-        # Step 3: pyAudioAnalysis feature extraction
-        results['pyaudioanalysis'] = self._mock_pyaudioanalysis_processing(scene, context)
-        
-        logger.info(f"Audio pipeline complete for scene {scene_id} (MOCK)")
-        return results
+        try:
+            # Step 1: Whisper transcription (using FFmpeg-extracted audio)
+            if hasattr(context, 'audio_path') and context.audio_path:
+                results['whisper'] = self.whisper_service.transcribe_audio(
+                    context.audio_path, scene_info=scene
+                )
+            else:
+                logger.warning(f"No audio file available for scene {scene_id}")
+                results['whisper'] = self._fallback_whisper_result(scene)
+            
+            # Step 2: LibROSA music analysis (mock for now - Phase 3)
+            results['librosa'] = self._mock_librosa_processing(scene, context)
+            
+            # Step 3: pyAudioAnalysis feature extraction (mock for now - Phase 3)
+            results['pyaudioanalysis'] = self._mock_pyaudioanalysis_processing(scene, context)
+            
+            logger.info(f"Audio pipeline complete for scene {scene_id}")
+            return results
+            
+        except Exception as e:
+            logger.error(f"Audio pipeline failed for scene {scene_id}: {e}")
+            # Return fallback results to prevent complete failure
+            return {
+                'whisper': self._fallback_whisper_result(scene),
+                'librosa': self._fallback_librosa_result(scene),
+                'pyaudioanalysis': self._fallback_pyaudioanalysis_result(scene),
+                'error': str(e)
+            }
     
-    def _mock_whisper_processing(self, scene: Dict[str, Any], context) -> Dict[str, Any]:
-        """Mock Whisper transcription processing"""
-        logger.debug(f"Mock Whisper processing for scene {scene['scene_id']}")
-        
-        # Simulate processing time
-        time.sleep(1.0)
-        
+    def _fallback_whisper_result(self, scene: Dict[str, Any]) -> Dict[str, Any]:
+        """Fallback Whisper result when audio processing fails"""
         return {
-            'transcript': f"This is mock transcript content for scene {scene['scene_id']}. "
-                         f"Speaker discusses topics relevant to this {scene['duration']:.1f} second segment.",
-            'speakers': ['Speaker_1', 'Speaker_2'] if scene['scene_id'] % 2 == 0 else ['Speaker_1'],
-            'language': 'en',
-            'confidence': 0.92,
-            'segments': [
-                {
-                    'start': scene['start_seconds'],
-                    'end': scene['end_seconds'],
-                    'text': f"Mock transcript for scene {scene['scene_id']}"
-                }
-            ],
-            'processing_time': 1.0,
-            'mock_mode': True
+            'transcript': f"[Audio processing failed for scene {scene['scene_id']}]",
+            'speakers': [],
+            'language': 'unknown',
+            'language_probability': 0.0,
+            'segments': [],
+            'processing_time': 0.0,
+            'error': 'Audio processing unavailable',
+            'fallback_mode': True
+        }
+    
+    def _fallback_librosa_result(self, scene: Dict[str, Any]) -> Dict[str, Any]:
+        """Fallback LibROSA result when processing fails"""
+        return {
+            'features': {},
+            'processing_time': 0.0,
+            'error': 'LibROSA processing unavailable',
+            'fallback_mode': True
+        }
+    
+    def _fallback_pyaudioanalysis_result(self, scene: Dict[str, Any]) -> Dict[str, Any]:
+        """Fallback pyAudioAnalysis result when processing fails"""
+        return {
+            'features': {},
+            'processing_time': 0.0,
+            'error': 'pyAudioAnalysis processing unavailable',
+            'fallback_mode': True
         }
     
     def _mock_librosa_processing(self, scene: Dict[str, Any], context) -> Dict[str, Any]:

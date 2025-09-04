@@ -1,13 +1,14 @@
 """
 Video GPU Pipeline Controller for visual analysis.
 
-Mock implementation for Phase 1 - handles YOLO and EasyOCR coordination.
-Sequential GPU processing for visual elements.
+Handles YOLO and EasyOCR coordination with sequential GPU processing.
 """
 
 import time
+from pathlib import Path
 from typing import Dict, Any
 
+from services.yolo_service import YOLOService, YOLOError
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -26,11 +27,16 @@ class VideoGPUPipelineController:
         self.config = config
         self.gpu_config = config.get('gpu_pipeline', {})
         
-        logger.info("Video GPU pipeline controller initialized (MOCK MODE)")
+        # Initialize services
+        self.yolo_service = YOLOService(config)
+        
+        logger.info("Video GPU pipeline controller initialized")
     
     def process_scene(self, scene: Dict[str, Any], context) -> Dict[str, Any]:
         """
-        Process scene through Video GPU pipeline (MOCK IMPLEMENTATION)
+        Process scene through Video GPU pipeline
+        
+        Sequential GPU processing: YOLO → EasyOCR
         
         Args:
             scene: Scene boundary data
@@ -40,46 +46,56 @@ class VideoGPUPipelineController:
             Visual analysis results from YOLO + EasyOCR
         """
         scene_id = scene['scene_id']
-        logger.info(f"Processing scene {scene_id} through Video GPU pipeline (MOCK)")
+        logger.info(f"Processing scene {scene_id} through Video GPU pipeline")
         
-        # Sequential GPU processing simulation
         results = {}
         
-        # Mock YOLO object detection  
-        results['yolo'] = self._mock_yolo_processing(scene, context)
-        
-        # Mock EasyOCR text extraction
-        results['easyocr'] = self._mock_easyocr_processing(scene, context)
-        
-        logger.info(f"Video GPU pipeline complete for scene {scene_id} (MOCK)")
-        return results
+        try:
+            # Step 1: YOLO object detection (using FFmpeg-extracted video)
+            if hasattr(context, 'video_path') and context.video_path:
+                results['yolo'] = self.yolo_service.analyze_video(
+                    context.video_path, scene_info=scene
+                )
+            else:
+                logger.warning(f"No video file available for scene {scene_id}")
+                results['yolo'] = self._fallback_yolo_result(scene)
+            
+            # Step 2: EasyOCR text extraction (mock for now - Phase 4)
+            results['easyocr'] = self._mock_easyocr_processing(scene, context)
+            
+            logger.info(f"Video GPU pipeline complete for scene {scene_id}")
+            return results
+            
+        except Exception as e:
+            logger.error(f"Video GPU pipeline failed for scene {scene_id}: {e}")
+            # Return fallback results to prevent complete failure
+            return {
+                'yolo': self._fallback_yolo_result(scene),
+                'easyocr': self._fallback_easyocr_result(scene),
+                'error': str(e)
+            }
     
-    
-    def _mock_yolo_processing(self, scene: Dict[str, Any], context) -> Dict[str, Any]:
-        """Mock YOLO object detection processing"""
-        logger.debug(f"Mock YOLO processing for scene {scene['scene_id']}")
-        
-        # Simulate processing time
-        time.sleep(0.5)
-        
-        # Mock detected objects based on scene
-        mock_objects = ['person', 'laptop', 'chair']
-        if scene['scene_id'] % 3 == 0:
-            mock_objects.extend(['whiteboard', 'projector'])
-        
+    def _fallback_yolo_result(self, scene: Dict[str, Any]) -> Dict[str, Any]:
+        """Fallback YOLO result when video processing fails"""
         return {
-            'objects': mock_objects,
-            'people_count': 2 if scene['scene_id'] % 2 == 0 else 1,
-            'object_details': [
-                {
-                    'class': obj,
-                    'confidence': 0.85 + (0.1 * (i % 2)),
-                    'bbox': [100 + i*50, 100 + i*30, 150 + i*50, 200 + i*30]
-                }
-                for i, obj in enumerate(mock_objects)
-            ],
-            'processing_time': 0.5,
-            'mock_mode': True
+            'objects': [],
+            'object_counts': {},
+            'people_count': 0,
+            'total_detections': 0,
+            'object_details': [],
+            'processing_time': 0.0,
+            'error': 'YOLO processing unavailable',
+            'fallback_mode': True
+        }
+    
+    def _fallback_easyocr_result(self, scene: Dict[str, Any]) -> Dict[str, Any]:
+        """Fallback EasyOCR result when processing fails"""
+        return {
+            'text': [],
+            'text_details': [],
+            'processing_time': 0.0,
+            'error': 'EasyOCR processing unavailable',
+            'fallback_mode': True
         }
     
     def _mock_easyocr_processing(self, scene: Dict[str, Any], context) -> Dict[str, Any]:
