@@ -6,10 +6,12 @@ Optimized for FFmpeg-prepared audio.wav files with scene context preservation.
 """
 
 import time
+import json
 import numpy as np
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
 import gc
+from datetime import datetime
 
 # Optional imports for development mode
 try:
@@ -92,11 +94,20 @@ class LibROSAService:
             }
             
             logger.debug(f"LibROSA analysis complete - tempo: {results['tempo_analysis'].get('tempo', 'N/A')}")
+            
+            # Save analysis to intermediate file
+            self._save_analysis_to_file(audio_path, results)
+            
             return results
             
         except Exception as e:
             logger.error(f"LibROSA analysis failed: {e}")
-            return self._fallback_analysis_result(scene_info, error=str(e))
+            fallback_result = self._fallback_analysis_result(scene_info, error=str(e))
+            
+            # Save fallback analysis to intermediate file
+            self._save_analysis_to_file(audio_path, fallback_result)
+            
+            return fallback_result
     
     def _extract_scene_audio(self, audio_path: str, scene_info: Dict) -> Optional[np.ndarray]:
         """Extract specific scene audio segment"""
@@ -349,3 +360,53 @@ class LibROSAService:
         # Force garbage collection for memory cleanup
         gc.collect()
         logger.debug("LibROSA service cleanup complete")
+    
+    def _save_analysis_to_file(self, audio_path: str, analysis_result: Dict[str, Any]):
+        """Save LibROSA analysis results to intermediate JSON file"""
+        try:
+            # Determine build directory from audio path
+            # audio_path format: build/[video_name]/audio.wav
+            audio_pathlib = Path(audio_path)
+            build_dir = audio_pathlib.parent
+            analysis_dir = build_dir / "audio_analysis"
+            analysis_dir.mkdir(exist_ok=True)
+            
+            # Create timestamped filename
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            output_file = analysis_dir / "librosa_music_analysis.json"
+            
+            # Convert numpy arrays to lists for JSON serialization
+            serializable_result = self._make_json_serializable(analysis_result)
+            
+            # Add metadata to analysis result
+            analysis_with_metadata = {
+                **serializable_result,
+                'analysis_timestamp': timestamp,
+                'input_file': str(audio_path),
+                'service_version': 'librosa_v1.0.0'
+            }
+            
+            # Save to JSON file
+            with open(output_file, 'w', encoding='utf-8') as f:
+                json.dump(analysis_with_metadata, f, indent=2, ensure_ascii=False)
+            
+            logger.info(f"LibROSA analysis saved to: {output_file}")
+            
+        except Exception as e:
+            logger.error(f"Failed to save LibROSA analysis to file: {e}")
+            # Don't raise - file saving is supplementary to main processing
+    
+    def _make_json_serializable(self, data: Any) -> Any:
+        """Convert numpy arrays and other non-serializable objects to JSON-compatible format"""
+        if isinstance(data, dict):
+            return {key: self._make_json_serializable(value) for key, value in data.items()}
+        elif isinstance(data, list):
+            return [self._make_json_serializable(item) for item in data]
+        elif isinstance(data, np.ndarray):
+            return data.tolist()
+        elif isinstance(data, np.floating):
+            return float(data)
+        elif isinstance(data, np.integer):
+            return int(data)
+        else:
+            return data

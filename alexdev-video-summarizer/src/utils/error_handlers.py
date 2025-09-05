@@ -499,7 +499,7 @@ class ErrorPatternAnalyzer:
 Batch Processing Report
 =======================
 
-📊 Overall Statistics:
+[STATS] Overall Statistics:
    Total Videos: {total_videos}
    Successful: {successful}
    Failed: {failed}
@@ -508,7 +508,7 @@ Batch Processing Report
 """
         
         if failed > 0:
-            report += "❌ Failed Videos:\n"
+            report += "[FAILED] Failed Videos:\n"
             for result in batch_results:
                 if not result.get('success', False):
                     video_name = result.get('video_path', 'Unknown')

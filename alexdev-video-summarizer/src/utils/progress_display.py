@@ -40,8 +40,8 @@ class ProgressDisplay:
         self.pipeline_status = {}
         
         header = Panel(
-            f"🎬 [bold cyan]Processing Video {video_num}/{total_videos}[/bold cyan]\n"
-            f"📁 {video_name}",
+            f"[VIDEO] [bold cyan]Processing Video {video_num}/{total_videos}[/bold cyan]\n"
+            f"[FILE] {video_name}",
             title="Current Video",
             border_style="cyan"
         )
@@ -67,7 +67,7 @@ class ProgressDisplay:
         
     def _create_pipeline_table(self) -> Table:
         """Create pipeline status table"""
-        table = Table(title="🔄 Processing Pipeline Status")
+        table = Table(title="[PIPELINE] Processing Pipeline Status")
         table.add_column("Stage", style="bold")
         table.add_column("Tool", style="cyan")
         table.add_column("Status", style="bold")
@@ -77,8 +77,8 @@ class ProgressDisplay:
         stages = [
             ('initializing', 'Setup', '⚙️'),
             ('ffmpeg', 'FFmpeg', '🎞️'),
-            ('scene_detection', 'PySceneDetect', '🎬'),
-            ('scene_processing', 'Scene Analysis', '📊'),
+            ('scene_detection', 'PySceneDetect', '[SCENE]'),
+            ('scene_processing', 'Scene Analysis', '[ANALYSIS]'),
             ('audio_pipeline', 'Audio Pipeline', '🎵'),
             ('video_gpu_pipeline', 'Video GPU Pipeline', '🖥️'),
             ('video_cpu_pipeline', 'Video CPU Pipeline', '👁️'),
@@ -108,11 +108,11 @@ class ProgressDisplay:
         if stage_status == 'starting':
             return "[yellow]⏳ Running[/yellow]", "Starting..."
         elif stage_status == 'completed':
-            return "[green]✅ Complete[/green]", self._get_completion_details(stage, data)
+            return "[green][DONE] Complete[/green]", self._get_completion_details(stage, data)
         elif stage_status == 'error':
-            return "[red]❌ Failed[/red]", data.get('error', 'Unknown error')
+            return "[red][FAIL] Failed[/red]", data.get('error', 'Unknown error')
         else:
-            return "[blue]📊 Processing[/blue]", self._get_progress_details(stage, data)
+            return "[blue][WORK] Processing[/blue]", self._get_progress_details(stage, data)
             
     def _get_completion_details(self, stage: str, data: Dict[str, Any]) -> str:
         """Get completion details for a stage"""
@@ -146,8 +146,8 @@ class ProgressDisplay:
     def show_video_success(self, video_name: str, processing_time: float):
         """Show successful video completion"""
         success_panel = Panel(
-            f"✅ [bold green]SUCCESS[/bold green]\n"
-            f"📁 {video_name}\n"
+            f"[SUCCESS] [bold green]SUCCESS[/bold green]\n"
+            f"[FILE] {video_name}\n"
             f"⏱️  Processing time: {processing_time:.1f} seconds\n"
             f"📄 Knowledge base created",
             title="Video Processed",
@@ -158,10 +158,10 @@ class ProgressDisplay:
     def show_video_failure(self, video_name: str, error: str):
         """Show video processing failure"""
         failure_panel = Panel(
-            f"❌ [bold red]FAILED[/bold red]\n"
-            f"📁 {video_name}\n"
-            f"💥 Error: {error}\n"
-            f"🔄 Continuing with next video...",
+            f"[FAILED] [bold red]FAILED[/bold red]\n"
+            f"[FILE] {video_name}\n"
+            f"[ERROR] Error: {error}\n"
+            f"[CONTINUE] Continuing with next video...",
             title="Processing Failed",
             border_style="red"
         )
@@ -174,8 +174,8 @@ class ProgressDisplay:
         circuit_breaker_panel = Panel(
             f"🚨 [bold red]CIRCUIT BREAKER ACTIVATED[/bold red]\n"
             f"⚠️  Too many consecutive failures detected\n"
-            f"🛑 Stopping batch processing\n"
-            f"📊 Videos processed: {current_video - 1}/{total_videos}\n"
+            f"[STOP] Stopping batch processing\n"
+            f"[STATS] Videos processed: {current_video - 1}/{total_videos}\n"
             f"⏸️  Videos remaining: {remaining}\n\n"
             f"🔧 Check system resources and try again",
             title="Batch Processing Aborted",

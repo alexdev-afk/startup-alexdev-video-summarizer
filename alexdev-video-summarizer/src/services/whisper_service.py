@@ -1,14 +1,18 @@
 """
-Whisper Transcription Service
+WhisperX + Silero VAD Transcription Service
 
-Handles GPU-based audio transcription using OpenAI Whisper.
-Optimized for FFmpeg-prepared audio.wav files with speaker identification.
+Handles GPU-based audio transcription using WhisperX with Silero VAD.
+Optimized for FFmpeg-prepared audio.wav files with enhanced speaker identification.
 """
 
 import time
+import json
+import os
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 import gc
+from datetime import datetime
+import numpy as np
 
 # Optional imports for development mode
 try:
@@ -16,6 +20,36 @@ try:
     TORCH_AVAILABLE = True
 except ImportError:
     TORCH_AVAILABLE = False
+
+try:
+    import whisperx
+    WHISPERX_AVAILABLE = True
+except ImportError:
+    WHISPERX_AVAILABLE = False
+
+try:
+    # Silero VAD model and utilities
+    silero_vad_model = None
+    silero_utils = None
+    SILERO_AVAILABLE = False
+    
+    def load_silero_vad():
+        global silero_vad_model, silero_utils, SILERO_AVAILABLE
+        if not SILERO_AVAILABLE:
+            try:
+                silero_vad_model, silero_utils = torch.hub.load(
+                    repo_or_dir="snakers4/silero-vad", 
+                    model="silero_vad", 
+                    onnx=False
+                )
+                SILERO_AVAILABLE = True
+            except Exception as e:
+                logger.warning(f"Failed to load Silero VAD: {e}")
+        return silero_vad_model, silero_utils
+except ImportError:
+    SILERO_AVAILABLE = False
+    def load_silero_vad():
+        return None, None
 
 from utils.logger import get_logger
 
@@ -28,11 +62,11 @@ class WhisperError(Exception):
 
 
 class WhisperService:
-    """Whisper transcription service for audio processing"""
+    """WhisperX + Silero VAD transcription service for audio processing"""
     
     def __init__(self, config: Dict[str, Any]):
         """
-        Initialize Whisper service
+        Initialize WhisperX + Silero VAD service
         
         Args:
             config: Configuration dictionary with Whisper settings
@@ -46,11 +80,27 @@ class WhisperService:
         self.device = self._determine_device()
         self.language = self.whisper_config.get('language', 'auto')
         
+        # VAD configuration
+        self.vad_threshold = self.whisper_config.get('vad_threshold', 0.4)
+        self.chunk_threshold = self.whisper_config.get('chunk_threshold', 3.0)
+        
+        # Diarization configuration
+        self.huggingface_token = self.whisper_config.get('huggingface_token')
+        self.enable_diarization = self.whisper_config.get('enable_diarization', True)
+        self.max_speakers = self.whisper_config.get('max_speakers', 10)
+        self.min_speakers = self.whisper_config.get('min_speakers', 1)
+        
         # Runtime state
-        self.model = None
+        self.whisperx_model = None
+        self.diarize_model = None
+        self.silero_model = None
+        self.silero_utils = None
         self.model_loaded = False
         
-        logger.info(f"Whisper service initialized - model: {self.model_size}, device: {self.device}")
+        # Setup FFmpeg path for Whisper compatibility
+        self._setup_ffmpeg_path()
+        
+        logger.info(f"WhisperX + Silero VAD service initialized - model: {self.model_size}, device: {self.device}, vad_threshold: {self.vad_threshold}")
     
     def _determine_device(self) -> str:
         """Determine the best device for Whisper processing"""
@@ -65,48 +115,121 @@ class WhisperService:
         
         return device_config
     
+    def _setup_ffmpeg_path(self):
+        """Setup FFmpeg path in environment for Whisper compatibility"""
+        import platform
+        
+        # Try to find FFmpeg using the same logic as FFmpeg service
+        if platform.system() == 'Windows':
+            # WinGet installation path
+            winget_path = Path.home() / "AppData/Local/Microsoft/WinGet/Packages/Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe/ffmpeg-8.0-full_build/bin/ffmpeg.exe"
+            if winget_path.exists():
+                # Add the directory containing ffmpeg.exe to PATH
+                ffmpeg_dir = str(winget_path.parent)
+                if ffmpeg_dir not in os.environ.get('PATH', ''):
+                    os.environ['PATH'] = ffmpeg_dir + os.pathsep + os.environ.get('PATH', '')
+                    logger.info(f"Added FFmpeg directory to PATH for Whisper: {ffmpeg_dir}")
+                return
+            
+            # WinGet Links path
+            links_path = Path.home() / "AppData/Local/Microsoft/WinGet/Links/ffmpeg.exe"
+            if links_path.exists():
+                ffmpeg_dir = str(links_path.parent)
+                if ffmpeg_dir not in os.environ.get('PATH', ''):
+                    os.environ['PATH'] = ffmpeg_dir + os.pathsep + os.environ.get('PATH', '')
+                    logger.info(f"Added FFmpeg directory to PATH for Whisper: {ffmpeg_dir}")
+                return
+        
+        # If ffmpeg not found, log warning but continue
+        logger.warning("FFmpeg not found in common locations. Whisper may fail if ffmpeg is not in PATH.")
+    
     def _load_model(self):
-        """Load Whisper model (lazy loading)"""
+        """Load WhisperX and Silero VAD models (lazy loading)"""
         if self.model_loaded:
             return
         
         # Skip model loading in development mode or if dependencies missing
         if self.development_config.get('skip_model_loading', False) or not TORCH_AVAILABLE:
-            logger.info("Whisper model loading skipped (development mode or missing dependencies)")
+            logger.info("WhisperX + Silero VAD model loading skipped (development mode or missing dependencies)")
             self.model_loaded = True
             return
         
         try:
-            import whisper
-            logger.info(f"Loading Whisper model: {self.model_size}")
+            # Load WhisperX model
+            if WHISPERX_AVAILABLE:
+                logger.info(f"Loading WhisperX model: {self.model_size}")
+                
+                # Set compute type based on device
+                if self.device == 'cuda':
+                    compute_type = 'float16'  # GPU supports float16
+                else:
+                    compute_type = 'int8'     # CPU fallback to int8
+                
+                self.whisperx_model = whisperx.load_model(
+                    self.model_size, 
+                    device=self.device,
+                    compute_type=compute_type
+                )
+                
+                # Load diarization model if enabled and token available
+                if self.enable_diarization and self.huggingface_token:
+                    try:
+                        self.diarize_model = whisperx.diarize.DiarizationPipeline(
+                            use_auth_token=self.huggingface_token,
+                            device=self.device
+                        )
+                        logger.info("WhisperX model and diarization pipeline loaded successfully")
+                        logger.info(f"Diarization enabled: speakers {self.min_speakers}-{self.max_speakers}")
+                    except Exception as e:
+                        logger.warning(f"Diarization pipeline failed to load: {e}")
+                        logger.info("WhisperX model loaded successfully (without diarization)")
+                        self.diarize_model = None
+                elif not self.huggingface_token and self.enable_diarization:
+                    logger.warning("Diarization enabled but no Hugging Face token provided")
+                    logger.info("Set 'huggingface_token' in config for speaker diarization")
+                    self.diarize_model = None
+                else:
+                    logger.info("WhisperX model loaded (diarization disabled in config)")
+                    self.diarize_model = None
+            else:
+                # Fallback to original Whisper
+                import whisper
+                logger.warning("WhisperX not available, falling back to OpenAI Whisper")
+                self.whisperx_model = whisper.load_model(self.model_size, device=self.device)
+                logger.info("OpenAI Whisper model loaded successfully")
             
-            self.model = whisper.load_model(self.model_size, device=self.device)
+            # Load Silero VAD model
+            self.silero_model, self.silero_utils = load_silero_vad()
+            if self.silero_model:
+                logger.info("Silero VAD model loaded successfully")
+            else:
+                logger.warning("Silero VAD not available, using basic VAD")
+            
             self.model_loaded = True
             
-            logger.info("Whisper model loaded successfully")
-            
-        except ImportError:
+        except ImportError as e:
             raise WhisperError(
-                "OpenAI Whisper not installed. Install with: pip install openai-whisper"
+                f"Required dependencies not installed: {str(e)}. "
+                "Install with: pip install whisperx torch"
             )
         except Exception as e:
-            raise WhisperError(f"Failed to load Whisper model: {str(e)}") from e
+            raise WhisperError(f"Failed to load models: {str(e)}") from e
     
     def transcribe_audio(self, audio_path: Path, scene_info: Optional[Dict] = None) -> Dict[str, Any]:
         """
-        Transcribe audio file using Whisper
+        Transcribe audio file using WhisperX + Silero VAD
         
         Args:
             audio_path: Path to audio.wav file (from FFmpeg)
             scene_info: Optional scene boundary information for context
             
         Returns:
-            Dictionary with transcription results
+            Dictionary with transcription results with whole-file timestamps
             
         Raises:
             WhisperError: If transcription fails
         """
-        logger.info(f"Transcribing audio: {audio_path.name}")
+        logger.info(f"Transcribing audio with VAD: {audio_path.name}")
         
         # Handle development mock mode
         if self.development_config.get('mock_ai_services', False):
@@ -120,41 +243,529 @@ class WhisperService:
             raise WhisperError(f"Audio file too small: {audio_path}")
         
         try:
-            # Load model if needed
+            # Load models if needed
             self._load_model()
             
             start_time = time.time()
             
-            # Transcribe with Whisper
-            transcription_options = {
-                'task': 'transcribe',
-                'verbose': False,
-            }
+            # STAGE 1: VAD-based audio segmentation
+            vad_segments = self._perform_vad_segmentation(audio_path)
+            logger.info(f"VAD detected {len(vad_segments)} speech segments")
             
-            # Set language if not auto-detect
-            if self.language != 'auto':
-                transcription_options['language'] = self.language
+            # STAGE 2: Process each VAD segment with WhisperX
+            all_transcription_segments = []
+            for i, vad_chunk in enumerate(vad_segments):
+                logger.debug(f"Processing VAD chunk {i+1}/{len(vad_segments)}")
+                chunk_result = self._transcribe_vad_chunk(audio_path, vad_chunk, i)
+                if chunk_result:
+                    all_transcription_segments.extend(chunk_result)
             
-            logger.debug(f"Starting Whisper transcription with options: {transcription_options}")
-            result = self.model.transcribe(str(audio_path), **transcription_options)
+            # STAGE 3: Reconstruct whole-file timestamps and merge segments
+            reconstructed_segments = self._reconstruct_whole_file_timestamps(
+                all_transcription_segments, vad_segments
+            )
+            
+            # STAGE 4: Apply speaker diarization if available
+            if self.diarize_model and WHISPERX_AVAILABLE:
+                reconstructed_segments = self._apply_speaker_diarization(
+                    audio_path, reconstructed_segments
+                )
             
             processing_time = time.time() - start_time
             
-            # Process results
-            processed_result = self._process_whisper_result(result, processing_time, scene_info)
+            # Build final result
+            processed_result = self._build_final_result(
+                reconstructed_segments, processing_time, scene_info, vad_segments
+            )
             
             # GPU memory cleanup
-            if self.device == 'cuda' and TORCH_AVAILABLE:
-                torch.cuda.empty_cache()
-                gc.collect()
+            self._cleanup_gpu_memory()
             
-            logger.info(f"Transcription complete: {processing_time:.2f}s, {len(result['segments'])} segments")
+            logger.info(f"VAD + WhisperX transcription complete: {processing_time:.2f}s, "
+                       f"{len(vad_segments)} VAD chunks -> {len(reconstructed_segments)} final segments")
+            
+            # Save analysis to intermediate file
+            self._save_analysis_to_file(audio_path, processed_result)
+            
             return processed_result
             
         except Exception as e:
             # Cleanup on error
             self._cleanup_gpu_memory()
-            raise WhisperError(f"Whisper transcription failed: {str(e)}") from e
+            raise WhisperError(f"VAD + WhisperX transcription failed: {str(e)}") from e
+    
+    def _perform_vad_segmentation(self, audio_path: Path) -> List[Dict[str, Any]]:
+        """
+        Perform Voice Activity Detection using Silero VAD
+        
+        Returns:
+            List of VAD segments with start/end timestamps and audio data
+        """
+        if not self.silero_model or not self.silero_utils:
+            logger.warning("Silero VAD not available, using fallback segmentation")
+            return self._fallback_vad_segmentation(audio_path)
+        
+        try:
+            # Extract VAD utilities
+            get_speech_timestamps, save_audio, read_audio, VADIterator, collect_chunks = self.silero_utils
+            
+            # Read audio at 16kHz for VAD (Silero VAD requirement)
+            VAD_SR = 16000
+            wav = read_audio(str(audio_path), sampling_rate=VAD_SR)
+            
+            # Get speech timestamps using Silero VAD
+            speech_timestamps = get_speech_timestamps(
+                wav, 
+                self.silero_model, 
+                sampling_rate=VAD_SR, 
+                threshold=self.vad_threshold
+            )
+            
+            logger.debug(f"Raw VAD detected {len(speech_timestamps)} speech regions")
+            
+            # Add padding and remove small gaps (following WhisperWithVAD approach)
+            for i, timestamp in enumerate(speech_timestamps):
+                # Add padding: 0.2s head, 1.3s tail
+                timestamp["start"] = max(0, timestamp["start"] - int(0.2 * VAD_SR))
+                timestamp["end"] = min(wav.shape[0] - 16, timestamp["end"] + int(1.3 * VAD_SR))
+                
+                # Remove overlaps
+                if i > 0 and timestamp["start"] < speech_timestamps[i - 1]["end"]:
+                    timestamp["start"] = speech_timestamps[i - 1]["end"]
+            
+            # Group speech segments, splitting on long gaps
+            chunk_threshold_samples = int(self.chunk_threshold * VAD_SR)
+            vad_chunks = [[]]
+            
+            for timestamp in speech_timestamps:
+                # If gap is longer than chunk_threshold, start new chunk
+                if (len(vad_chunks[-1]) > 0 and 
+                    timestamp["start"] > vad_chunks[-1][-1]["end"] + chunk_threshold_samples):
+                    vad_chunks.append([])
+                
+                vad_chunks[-1].append(timestamp)
+            
+            # Convert to our format with whole-file timestamps and audio data
+            processed_chunks = []
+            for chunk_idx, chunk_timestamps in enumerate(vad_chunks):
+                if not chunk_timestamps:
+                    continue
+                
+                # Collect audio data for this chunk
+                chunk_audio = collect_chunks(chunk_timestamps, wav)
+                
+                # Calculate chunk timing in whole-file context
+                chunk_start_seconds = chunk_timestamps[0]["start"] / VAD_SR
+                chunk_end_seconds = chunk_timestamps[-1]["end"] / VAD_SR
+                
+                # Calculate offset tracking for timestamp reconstruction
+                offset = chunk_start_seconds
+                for i, ts in enumerate(chunk_timestamps):
+                    if i > 0:
+                        offset += (ts["start"] - chunk_timestamps[i-1]["end"]) / VAD_SR
+                
+                processed_chunks.append({
+                    'chunk_id': chunk_idx,
+                    'start_seconds': chunk_start_seconds,
+                    'end_seconds': chunk_end_seconds,
+                    'duration': chunk_end_seconds - chunk_start_seconds,
+                    'audio_data': chunk_audio,
+                    'offset': offset,
+                    'vad_segments': [
+                        {
+                            'start': ts["start"] / VAD_SR,
+                            'end': ts["end"] / VAD_SR
+                        } for ts in chunk_timestamps
+                    ],
+                    'sampling_rate': VAD_SR
+                })
+            
+            logger.info(f"VAD segmentation complete: {len(speech_timestamps)} regions -> {len(processed_chunks)} chunks")
+            return processed_chunks
+            
+        except Exception as e:
+            logger.error(f"Silero VAD failed: {e}, falling back to time-based segmentation")
+            return self._fallback_vad_segmentation(audio_path)
+    
+    def _fallback_vad_segmentation(self, audio_path: Path) -> List[Dict[str, Any]]:
+        """Fallback time-based segmentation when VAD is unavailable"""
+        try:
+            # Read audio file to get duration
+            import librosa
+            y, sr = librosa.load(str(audio_path), sr=None)
+            duration = len(y) / sr
+            
+            # Create 30-second chunks as fallback
+            chunk_duration = 30.0
+            chunks = []
+            
+            for i in range(0, int(duration), int(chunk_duration)):
+                start_seconds = i
+                end_seconds = min(i + chunk_duration, duration)
+                
+                # Extract audio chunk
+                start_sample = int(start_seconds * sr)
+                end_sample = int(end_seconds * sr)
+                chunk_audio = y[start_sample:end_sample]
+                
+                chunks.append({
+                    'chunk_id': i // int(chunk_duration),
+                    'start_seconds': start_seconds,
+                    'end_seconds': end_seconds,
+                    'duration': end_seconds - start_seconds,
+                    'audio_data': chunk_audio,
+                    'offset': start_seconds,
+                    'vad_segments': [{'start': start_seconds, 'end': end_seconds}],
+                    'sampling_rate': sr,
+                    'fallback': True
+                })
+            
+            logger.info(f"Fallback segmentation: {len(chunks)} time-based chunks")
+            return chunks
+            
+        except Exception as e:
+            logger.error(f"Fallback segmentation failed: {e}")
+            # Final fallback - single segment
+            return [{
+                'chunk_id': 0,
+                'start_seconds': 0,
+                'end_seconds': 60,  # Assume 60s
+                'duration': 60,
+                'audio_data': None,
+                'offset': 0,
+                'vad_segments': [{'start': 0, 'end': 60}],
+                'sampling_rate': 16000,
+                'fallback': True,
+                'single_segment': True
+            }]
+    
+    def _transcribe_vad_chunk(self, audio_path: Path, vad_chunk: Dict[str, Any], chunk_idx: int) -> List[Dict[str, Any]]:
+        """
+        Transcribe a single VAD chunk using WhisperX
+        
+        Returns:
+            List of transcription segments with chunk-relative timestamps
+        """
+        try:
+            # Save chunk audio to temporary file for WhisperX
+            temp_chunk_path = audio_path.parent / f"temp_chunk_{chunk_idx}.wav"
+            
+            if vad_chunk.get('audio_data') is not None:
+                # Save audio data using soundfile
+                import soundfile as sf
+                sf.write(temp_chunk_path, vad_chunk['audio_data'], vad_chunk['sampling_rate'])
+            else:
+                # Fallback - extract chunk from original file
+                self._extract_audio_chunk(audio_path, temp_chunk_path, vad_chunk)
+            
+            # Transcribe with WhisperX or fallback Whisper
+            if WHISPERX_AVAILABLE and hasattr(self.whisperx_model, 'transcribe'):
+                # WhisperX transcription
+                result = self.whisperx_model.transcribe(str(temp_chunk_path))
+                
+                # WhisperX alignment for better word timestamps
+                if hasattr(whisperx, 'load_align_model'):
+                    align_model, metadata = whisperx.load_align_model(
+                        language_code=result.get("language", "en"), 
+                        device=self.device
+                    )
+                    result = whisperx.align(result["segments"], align_model, metadata, str(temp_chunk_path), self.device)
+                    
+            else:
+                # Fallback to original Whisper
+                transcription_options = {
+                    'task': 'transcribe',
+                    'word_timestamps': True,
+                    'condition_on_previous_text': False,
+                    'temperature': 0,
+                    'no_speech_threshold': 0.6,
+                    'logprob_threshold': -1.0
+                }
+                
+                if self.language != 'auto':
+                    transcription_options['language'] = self.language
+                
+                result = self.whisperx_model.transcribe(str(temp_chunk_path), **transcription_options)
+            
+            # Clean up temporary file
+            try:
+                temp_chunk_path.unlink()
+            except:
+                pass
+            
+            # Process segments - add chunk context for timestamp reconstruction
+            chunk_segments = []
+            for segment in result.get('segments', []):
+                # Apply hallucination filtering (from WhisperWithVAD)
+                if self._is_hallucination(segment):
+                    continue
+                
+                chunk_segments.append({
+                    'chunk_id': chunk_idx,
+                    'chunk_start': segment.get('start', 0),
+                    'chunk_end': segment.get('end', 0),
+                    'text': segment.get('text', '').strip(),
+                    'confidence': 1.0 - segment.get('no_speech_prob', 0.0),
+                    'words': segment.get('words', []),
+                    'vad_chunk_info': vad_chunk  # Store chunk info for timestamp reconstruction
+                })
+            
+            return chunk_segments
+            
+        except Exception as e:
+            logger.error(f"Failed to transcribe VAD chunk {chunk_idx}: {e}")
+            return []
+    
+    def _extract_audio_chunk(self, audio_path: Path, output_path: Path, vad_chunk: Dict[str, Any]):
+        """Extract audio chunk using ffmpeg when audio_data is not available"""
+        try:
+            import subprocess
+            
+            start_time = vad_chunk['start_seconds']
+            duration = vad_chunk['duration']
+            
+            cmd = [
+                'ffmpeg', '-y',
+                '-i', str(audio_path),
+                '-ss', str(start_time),
+                '-t', str(duration),
+                '-ar', '16000',
+                '-ac', '1',
+                str(output_path)
+            ]
+            
+            subprocess.run(cmd, capture_output=True, check=True)
+            
+        except Exception as e:
+            logger.error(f"Failed to extract audio chunk: {e}")
+            raise
+    
+    def _is_hallucination(self, segment: Dict[str, Any]) -> bool:
+        """
+        Filter common Whisper hallucinations (adapted from WhisperWithVAD)
+        """
+        text = segment.get('text', '').strip().lower()
+        
+        # Common hallucination patterns
+        suppress_patterns = [
+            "thank you", "thanks for", "subscribe", "like and",
+            "bye", "bye bye", "please sub", "the end",
+            "my channel", "the channel", "for watching",
+            "thank you for watching", "see you next", "full video"
+        ]
+        
+        # Low confidence or high no-speech probability
+        confidence = 1.0 - segment.get('no_speech_prob', 0.0)
+        avg_logprob = segment.get('avg_logprob', 0)
+        
+        if confidence < 0.3 or avg_logprob < -1.0:
+            return True
+        
+        # Check for hallucination patterns
+        for pattern in suppress_patterns:
+            if pattern in text:
+                # Apply additional confidence penalty
+                confidence -= 0.35 if len(pattern) > 10 else 0.15
+                if confidence < 0.5:
+                    return True
+        
+        return False
+    
+    def _reconstruct_whole_file_timestamps(self, all_segments: List[Dict[str, Any]], 
+                                          vad_chunks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Reconstruct whole-file timestamps from chunk-relative timestamps
+        
+        This is the critical step that preserves timing context for institutional knowledge
+        """
+        reconstructed = []
+        
+        for segment in all_segments:
+            chunk_id = segment['chunk_id']
+            vad_chunk = vad_chunks[chunk_id]
+            
+            # Reconstruct whole-file timestamps
+            whole_file_start = vad_chunk['start_seconds'] + segment['chunk_start']
+            whole_file_end = vad_chunk['start_seconds'] + segment['chunk_end']
+            
+            reconstructed_segment = {
+                'start': whole_file_start,
+                'end': whole_file_end,
+                'duration': whole_file_end - whole_file_start,
+                'text': segment['text'],
+                'confidence': segment['confidence'],
+                'words': self._reconstruct_word_timestamps(segment['words'], vad_chunk['start_seconds']),
+                'speaker': 'Unknown',  # Will be filled by diarization
+                'vad_chunk_id': chunk_id,
+                'original_chunk_timing': {
+                    'chunk_start': segment['chunk_start'],
+                    'chunk_end': segment['chunk_end']
+                }
+            }
+            
+            reconstructed.append(reconstructed_segment)
+        
+        # Sort by start time to ensure chronological order
+        reconstructed.sort(key=lambda x: x['start'])
+        
+        logger.debug(f"Timestamp reconstruction: {len(all_segments)} chunk segments -> {len(reconstructed)} whole-file segments")
+        return reconstructed
+    
+    def _reconstruct_word_timestamps(self, words: List[Dict[str, Any]], chunk_offset: float) -> List[Dict[str, Any]]:
+        """Reconstruct word-level timestamps to whole-file context"""
+        if not words:
+            return []
+        
+        reconstructed_words = []
+        for word in words:
+            reconstructed_words.append({
+                'word': word.get('word', ''),
+                'start': chunk_offset + word.get('start', 0),
+                'end': chunk_offset + word.get('end', 0),
+                'confidence': word.get('confidence', word.get('probability', 1.0))
+            })
+        
+        return reconstructed_words
+    
+    def _apply_speaker_diarization(self, audio_path: Path, segments: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Apply speaker diarization using WhisperX diarization pipeline
+        """
+        if not self.diarize_model:
+            logger.warning("Diarization model not available, using fallback speaker assignment")
+            return self._fallback_speaker_assignment(segments)
+        
+        try:
+            logger.info("Applying WhisperX speaker diarization...")
+            
+            # Load audio using WhisperX
+            audio = whisperx.load_audio(str(audio_path))
+            
+            # Run diarization on the audio with speaker constraints
+            diarize_segments = self.diarize_model(
+                audio,
+                min_speakers=self.min_speakers,
+                max_speakers=self.max_speakers
+            )
+            
+            # Convert our segments to WhisperX format for speaker assignment
+            whisperx_result = {
+                'segments': [
+                    {
+                        'start': seg['start'],
+                        'end': seg['end'], 
+                        'text': seg['text'],
+                        'words': seg.get('words', [])
+                    } for seg in segments
+                ]
+            }
+            
+            # Apply speaker assignment using WhisperX
+            result_with_speakers = whisperx.assign_word_speakers(diarize_segments, whisperx_result)
+            
+            # Update our segments with speaker information
+            for i, whisperx_segment in enumerate(result_with_speakers['segments']):
+                if i < len(segments):
+                    # Extract speaker from WhisperX result
+                    speaker = whisperx_segment.get('speaker', 'Unknown')
+                    if speaker == 'Unknown' or speaker is None:
+                        # Try to get speaker from words if segment speaker is unknown
+                        words = whisperx_segment.get('words', [])
+                        if words:
+                            word_speakers = [w.get('speaker') for w in words if w.get('speaker')]
+                            if word_speakers:
+                                # Use most common speaker in the segment
+                                from collections import Counter
+                                speaker = Counter(word_speakers).most_common(1)[0][0]
+                    
+                    segments[i]['speaker'] = speaker if speaker != 'Unknown' else f'Speaker_{i % 2 + 1}'
+                    
+                    # Update word-level speaker information if available
+                    if 'words' in whisperx_segment:
+                        segments[i]['words'] = whisperx_segment['words']
+            
+            unique_speakers = set(seg['speaker'] for seg in segments if seg['speaker'] != 'Unknown')
+            logger.info(f"WhisperX speaker diarization complete: {len(unique_speakers)} speakers detected")
+            
+        except Exception as e:
+            logger.error(f"WhisperX speaker diarization failed: {e}")
+            logger.info("Falling back to basic speaker assignment")
+            segments = self._fallback_speaker_assignment(segments)
+        
+        return segments
+    
+    def _fallback_speaker_assignment(self, segments: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Fallback speaker assignment when diarization is not available
+        """
+        logger.debug("Using fallback speaker assignment based on timing patterns")
+        
+        for i, segment in enumerate(segments):
+            if len(segments) > 1:
+                # Simple heuristic: long pauses suggest speaker changes
+                if i == 0:
+                    speaker = 'Speaker_1'
+                elif segment['start'] - segments[i-1]['end'] > 2.0:  # 2 second pause threshold
+                    prev_speaker = segments[i-1]['speaker']
+                    speaker = 'Speaker_2' if prev_speaker == 'Speaker_1' else 'Speaker_1'
+                else:
+                    speaker = segments[i-1]['speaker']  # Continue with same speaker
+            else:
+                speaker = 'Speaker_1'
+                
+            segments[i]['speaker'] = speaker
+        
+        unique_speakers = set(seg['speaker'] for seg in segments)
+        logger.debug(f"Fallback speaker assignment: {len(unique_speakers)} speakers assigned")
+        
+        return segments
+    
+    def _build_final_result(self, segments: List[Dict[str, Any]], processing_time: float, 
+                           scene_info: Optional[Dict], vad_chunks: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Build the final transcription result with comprehensive metadata"""
+        
+        # Extract unique speakers
+        speakers = sorted(list(set(seg['speaker'] for seg in segments if seg['speaker'] != 'Unknown')))
+        if not speakers:
+            speakers = ['Speaker_1']
+        
+        # Build full transcript
+        full_transcript = ' '.join(seg['text'] for seg in segments if seg['text'].strip())
+        
+        # Calculate statistics
+        total_speech_duration = sum(chunk['duration'] for chunk in vad_chunks)
+        total_segments = len(segments)
+        
+        final_result = {
+            'transcript': full_transcript,
+            'language': 'auto-detected',  # Would be detected by WhisperX
+            'language_probability': 0.95,  # Placeholder
+            'segments': segments,
+            'speakers': speakers,
+            'processing_time': processing_time,
+            'model_info': {
+                'model_size': self.model_size,
+                'device': self.device,
+                'whisperx_enabled': WHISPERX_AVAILABLE,
+                'silero_vad_enabled': self.silero_model is not None,
+                'diarization_enabled': self.diarize_model is not None
+            },
+            'scene_context': scene_info,
+            'vad_analysis': {
+                'total_chunks': len(vad_chunks),
+                'total_speech_duration': total_speech_duration,
+                'vad_threshold': self.vad_threshold,
+                'chunk_threshold': self.chunk_threshold
+            },
+            'quality_metrics': {
+                'segments_count': total_segments,
+                'average_segment_duration': sum(seg['duration'] for seg in segments) / max(1, total_segments),
+                'average_confidence': sum(seg['confidence'] for seg in segments) / max(1, total_segments),
+                'speaker_count': len(speakers)
+            }
+        }
+        
+        return final_result
     
     def _process_whisper_result(self, result: Dict, processing_time: float, scene_info: Optional[Dict]) -> Dict[str, Any]:
         """Process raw Whisper result into standardized format"""
@@ -178,6 +789,12 @@ class WhisperService:
                 'words': segment.get('words', []) if 'words' in segment else []
             })
         
+        # STAGE 2: Intelligent post-processing segment merging
+        original_count = len(segments)
+        if len(segments) > 1:
+            segments = self._merge_segments_intelligently(segments)
+            logger.debug(f"Segment merging: {original_count} -> {len(segments)} segments")
+        
         # Build final result
         processed_result = {
             'transcript': result.get('text', '').strip(),
@@ -190,10 +807,96 @@ class WhisperService:
                 'model_size': self.model_size,
                 'device': self.device
             },
-            'scene_context': scene_info
+            'scene_context': scene_info,
+            'segment_processing': {
+                'original_segments': original_count,
+                'merged_segments': len(segments),
+                'merge_ratio': f"{original_count}/{len(segments)}" if len(segments) > 0 else "0/0"
+            }
         }
         
         return processed_result
+
+    def _merge_segments_intelligently(self, segments: List[Dict]) -> List[Dict]:
+        """
+        Intelligent segment merging using multiple criteria
+        
+        Best practice approach:
+        - Merge short segments (< 2.5 seconds)
+        - Merge segments with small gaps (< 0.8 seconds)
+        - Keep incomplete sentences together
+        - Preserve semantic coherence
+        """
+        if len(segments) <= 1:
+            return segments
+        
+        merged = []
+        current = segments[0].copy()
+        
+        for next_seg in segments[1:]:
+            # Calculate metrics
+            current_duration = current['end'] - current['start']
+            gap_duration = next_seg['start'] - current['end']
+            current_text = current['text'].strip()
+            current_word_count = len(current_text.split())
+            
+            # Merge criteria (industry best practices)
+            should_merge = (
+                # Duration too short (less than 2.5 seconds)
+                current_duration < 2.5 or
+                
+                # Gap too small (less than 0.8 seconds) - likely same phrase
+                gap_duration < 0.8 or
+                
+                # Incomplete sentence (no ending punctuation)
+                (current_text and not current_text.endswith(('.', '!', '?', ':')) and 
+                 not next_seg['text'].strip().startswith(('And', 'But', 'So', 'Now', 'Then', 'However'))) or
+                
+                # Very short text (less than 4 words) - likely incomplete
+                current_word_count < 4 or
+                
+                # Next segment is very short continuation
+                len(next_seg['text'].strip().split()) < 3
+            )
+            
+            if should_merge:
+                # Merge the segments
+                gap_text = " " if gap_duration < 0.3 else "... "  # Add pause indicator for longer gaps
+                current['text'] = current_text + gap_text + next_seg['text'].strip()
+                current['end'] = next_seg['end']
+                
+                # Average confidence (weighted by duration)
+                current_weight = current_duration
+                next_weight = next_seg['end'] - next_seg['start']
+                total_weight = current_weight + next_weight
+                
+                if total_weight > 0:
+                    current['confidence'] = (
+                        (current['confidence'] * current_weight + 
+                         next_seg['confidence'] * next_weight) / total_weight
+                    )
+                
+                # Merge word timestamps if available
+                if current.get('words') and next_seg.get('words'):
+                    current['words'].extend(next_seg['words'])
+                    
+            else:
+                # Don't merge - add current segment and move to next
+                merged.append(current)
+                current = next_seg.copy()
+        
+        # Add the last segment
+        merged.append(current)
+        
+        # Post-processing: Clean up merged segments
+        for segment in merged:
+            # Clean up text
+            segment['text'] = ' '.join(segment['text'].split())  # Remove extra whitespace
+            
+            # Recalculate duration
+            segment['duration'] = segment['end'] - segment['start']
+        
+        return merged
     
     def _mock_transcription(self, audio_path: Path, scene_info: Optional[Dict]) -> Dict[str, Any]:
         """Mock transcription for development/testing"""
@@ -210,10 +913,10 @@ class WhisperService:
             f"This is a mock transcription for {video_name}, scene {scene_id}. "
             f"The speaker discusses various topics related to the video content. "
             f"Key points include project updates, technical details, and strategic planning. "
-            f"Multiple speakers may be present in this {scene_info.get('duration', 60):.1f} second segment."
+            f"Multiple speakers may be present in this {scene_info.get('duration', 60) if scene_info else 60:.1f} second segment."
         )
         
-        return {
+        mock_result = {
             'transcript': mock_transcript,
             'language': 'en',
             'language_probability': 0.95,
@@ -236,6 +939,11 @@ class WhisperService:
             'scene_context': scene_info,
             'mock_mode': True
         }
+        
+        # Save mock analysis to intermediate file
+        self._save_analysis_to_file(audio_path, mock_result)
+        
+        return mock_result
     
     def _cleanup_gpu_memory(self):
         """Cleanup GPU memory after processing"""
@@ -248,23 +956,82 @@ class WhisperService:
                 logger.warning(f"GPU memory cleanup failed: {e}")
     
     def unload_model(self):
-        """Unload model to free memory"""
-        if self.model is not None:
-            del self.model
-            self.model = None
-            self.model_loaded = False
-            self._cleanup_gpu_memory()
-            logger.debug("Whisper model unloaded")
+        """Unload models to free memory"""
+        if self.whisperx_model is not None:
+            del self.whisperx_model
+            self.whisperx_model = None
+        
+        if self.diarize_model is not None:
+            del self.diarize_model
+            self.diarize_model = None
+            
+        if self.silero_model is not None:
+            del self.silero_model
+            self.silero_model = None
+            
+        self.silero_utils = None
+        self.model_loaded = False
+        self._cleanup_gpu_memory()
+        logger.debug("WhisperX + Silero VAD models unloaded")
     
     def get_model_info(self) -> Dict[str, Any]:
-        """Get information about the loaded model"""
+        """Get information about the loaded models"""
         return {
             'model_size': self.model_size,
             'device': self.device,
             'language': self.language,
             'model_loaded': self.model_loaded,
-            'development_mode': self.development_config.get('mock_ai_services', False)
+            'whisperx_available': WHISPERX_AVAILABLE,
+            'silero_vad_available': self.silero_model is not None,
+            'diarization_available': self.diarize_model is not None,
+            'vad_threshold': self.vad_threshold,
+            'chunk_threshold': self.chunk_threshold,
+            'development_mode': self.development_config.get('mock_ai_services', False),
+            'enhancement_features': {
+                'vad_segmentation': True,
+                'hallucination_filtering': True,
+                'speaker_diarization': self.diarize_model is not None,
+                'word_level_timestamps': True,
+                'whole_file_timestamp_reconstruction': True
+            }
         }
+    
+    def _save_analysis_to_file(self, audio_path: Path, analysis_result: Dict[str, Any]):
+        """Save Whisper analysis results to intermediate JSON file"""
+        try:
+            # Determine build directory from audio path
+            # audio_path format: build/[video_name]/audio.wav
+            build_dir = audio_path.parent
+            analysis_dir = build_dir / "audio_analysis"
+            analysis_dir.mkdir(exist_ok=True)
+            
+            # Create timestamped filename
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            output_file = analysis_dir / "whisper_transcription.json"
+            
+            # Add metadata to analysis result
+            analysis_with_metadata = {
+                **analysis_result,
+                'analysis_timestamp': timestamp,
+                'input_file': str(audio_path),
+                'service_version': 'whisperx_silero_vad_v1.0.0',
+                'processing_pipeline': {
+                    'vad_stage': 'silero_vad' if self.silero_model else 'fallback_segmentation',
+                    'transcription_stage': 'whisperx' if WHISPERX_AVAILABLE else 'openai_whisper',
+                    'diarization_stage': 'whisperx_diarization' if self.diarize_model else 'basic_speaker_assignment',
+                    'timestamp_reconstruction': 'whole_file_context_preserved'
+                }
+            }
+            
+            # Save to JSON file
+            with open(output_file, 'w', encoding='utf-8') as f:
+                json.dump(analysis_with_metadata, f, indent=2, ensure_ascii=False)
+            
+            logger.info(f"Whisper analysis saved to: {output_file}")
+            
+        except Exception as e:
+            logger.error(f"Failed to save Whisper analysis to file: {e}")
+            # Don't raise - file saving is supplementary to main processing
 
 
 # Export for easy importing

@@ -68,11 +68,23 @@ gpu_pipeline:
     gpu: true
     confidence_threshold: 0.5
     
-  # Whisper Settings
+  # Whisper Settings (WhisperX + Silero VAD + pyannote diarization)
   whisper:
     model_size: "large-v2"      # large-v2 for best accuracy
     device: "auto"
     language: "en"              # Force English to prevent translation
+    
+    # VAD Settings (Voice Activity Detection)
+    vad_threshold: 0.4          # Silero VAD sensitivity (0.1-0.9)
+    chunk_threshold: 3.0        # Split chunks on gaps > 3 seconds
+    
+    # Speaker Diarization (requires Hugging Face token)
+    huggingface_token: "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"  # HF token for speaker diarization
+                               # Get free token: https://huggingface.co/settings/tokens
+                               # Required models: pyannote/segmentation-3.0, pyannote/speaker-diarization-3.1
+    enable_diarization: true    # Enable speaker diarization when token available
+    max_speakers: 10            # Maximum number of speakers to detect
+    min_speakers: 1             # Minimum number of speakers to detect
 
 # CPU Pipeline Configuration
 cpu_pipeline:

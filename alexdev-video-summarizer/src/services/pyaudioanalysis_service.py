@@ -180,18 +180,18 @@ class PyAudioAnalysisService:
                 
                 return fallback_result
             
-            # Comprehensive 68-feature analysis
+            # Comprehensive 68-feature analysis (speaker analysis removed - handled by WhisperX)
             results = {
                 'features_68': self._extract_68_features(audio_data, sample_rate),
                 'classification': self._classify_audio_content(audio_data, sample_rate),
-                'speaker_analysis': self._analyze_speakers(audio_data, sample_rate, scene_info),
                 'emotion_analysis': self._analyze_emotion(audio_data, sample_rate),
                 'summary_statistics': self._compute_summary_statistics(audio_data, sample_rate),
                 'processing_time': time.time() - start_time,
                 'scene_context': scene_info,
                 'sample_rate': sample_rate,
                 'window_size': self.window_size,
-                'step_size': self.step_size
+                'step_size': self.step_size,
+                'note': 'Speaker diarization handled by WhisperX + pyannote in transcription pipeline'
             }
             
             logger.debug(f"pyAudioAnalysis complete - {len(results['features_68'])} features extracted")
@@ -685,38 +685,8 @@ class PyAudioAnalysisService:
             'fallback_mode': True
         }
 
-    def _analyze_speakers(self, audio_data: np.ndarray, sample_rate: int, scene_info: Optional[Dict]) -> Dict[str, Any]:
-        """Analyze speaker characteristics and diarization"""
-        if not self.enable_speaker_diarization or not PYAUDIOANALYSIS_AVAILABLE:
-            return {'speaker_count': 1, 'speakers': ['Speaker_1'], 'diarization_confidence': 0.0}
-        
-        try:
-            # Advanced speaker diarization would use pyAudioAnalysis segmentation
-            # For now, implement basic speaker analysis
-            
-            # Estimate speaker count based on energy variation
-            energy_windows = []
-            window_samples = int(self.window_size * sample_rate)
-            
-            for i in range(0, len(audio_data) - window_samples, window_samples // 2):
-                window = audio_data[i:i + window_samples]
-                energy_windows.append(np.sqrt(np.mean(window ** 2)))
-            
-            # Simple speaker change detection based on energy variance
-            energy_variance = np.std(energy_windows)
-            estimated_speakers = min(max(1, int(energy_variance * 10)), 4)  # Cap at 4 speakers
-            
-            return {
-                'speaker_count': estimated_speakers,
-                'speakers': [f'Speaker_{i+1}' for i in range(estimated_speakers)],
-                'diarization_confidence': 0.7,
-                'speaker_segments': self._generate_speaker_segments(estimated_speakers, scene_info),
-                'energy_variance': float(energy_variance)
-            }
-            
-        except Exception as e:
-            logger.warning(f"Speaker analysis failed: {e}")
-            return {'speaker_count': 1, 'speakers': ['Speaker_1'], 'error': str(e)}
+    # _analyze_speakers method removed - misleading fake diarization
+    # Real speaker diarization now handled by WhisperX + pyannote in transcription pipeline
     
     def _analyze_emotion(self, audio_data: np.ndarray, sample_rate: int) -> Dict[str, Any]:
         """Analyze emotional content of speech"""
@@ -904,22 +874,8 @@ class PyAudioAnalysisService:
         except:
             return 0.0
     
-    def _generate_speaker_segments(self, speaker_count: int, scene_info: Optional[Dict]) -> List[Dict]:
-        """Generate mock speaker segments"""
-        segments = []
-        if scene_info and 'start_seconds' in scene_info and 'end_seconds' in scene_info:
-            duration = scene_info['end_seconds'] - scene_info['start_seconds']
-            segment_duration = duration / speaker_count
-            
-            for i in range(speaker_count):
-                segments.append({
-                    'speaker': f'Speaker_{i+1}',
-                    'start_time': scene_info['start_seconds'] + (i * segment_duration),
-                    'end_time': scene_info['start_seconds'] + ((i+1) * segment_duration),
-                    'confidence': 0.7
-                })
-        
-        return segments
+    # _generate_speaker_segments method removed - misleading fake diarization
+    # Real speaker diarization now handled by WhisperX + pyannote in transcription pipeline
     
     def _generate_mock_68_features(self) -> Dict[str, float]:
         """Generate mock 68 features when pyAudioAnalysis is not available"""

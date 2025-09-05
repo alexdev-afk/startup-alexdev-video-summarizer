@@ -15,11 +15,13 @@ opencv-python>=4.8.0        # OpenCV (required for PySceneDetect)
 # easyocr>=1.7.0              # Text extraction
 # Pillow>=9.0.0               # Image processing
 
-# Audio Analysis - ACTIVE FOR PHASE 3
-# whisperx>=3.1.0             # Enhanced Whisper with speaker ID (Phase 1 complete)
+# Audio Analysis - ACTIVE FOR PHASE 3 + WhisperX Enhancement
+whisperx>=3.1.0              # Enhanced Whisper with speaker diarization (UPGRADED)
+torch>=2.0.0                 # Required for WhisperX and Silero VAD
+soundfile>=0.12.0            # Audio file I/O for VAD chunk processing
 librosa>=0.10.0              # Audio feature extraction (Phase 3.1 - LibROSA - COMPLETE)
 pyAudioAnalysis>=0.3.0       # Comprehensive audio analysis (Phase 3.2 - pyAudioAnalysis)
-# soundfile>=0.12.0           # Audio file I/O (already installed via librosa)
+# Note: Silero VAD loaded via torch.hub (no separate package needed)
 
 # Video Processing - FOR PHASE 2+
 scenedetect>=0.6.2          # Scene boundary detection

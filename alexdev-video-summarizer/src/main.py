@@ -11,6 +11,18 @@ import sys
 import os
 from pathlib import Path
 
+# Fix Windows console encoding for Unicode support
+if sys.platform.startswith('win'):
+    try:
+        # Set console to UTF-8 mode
+        os.system('chcp 65001 > nul 2>&1')
+        import codecs
+        sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer, 'replace')
+        sys.stderr = codecs.getwriter('utf-8')(sys.stderr.buffer, 'replace')
+    except Exception:
+        # Fallback if encoding fix fails
+        pass
+
 # Add src to Python path for imports
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -20,10 +32,10 @@ from utils.logger import setup_logging
 
 
 @click.command()
-@click.option('--input', '-i', 'input_dir', 
-              type=click.Path(exists=True, file_okay=False, dir_okay=True),
+@click.option('--input', '-i', 'input_path', 
+              type=click.Path(exists=True, file_okay=True, dir_okay=True),
               default='input',
-              help='Input directory containing video files')
+              help='Input directory containing video files or single video file')
 @click.option('--output', '-o', 'output_dir',
               type=click.Path(file_okay=False, dir_okay=True),
               default='output',
@@ -36,7 +48,7 @@ from utils.logger import setup_logging
               help='Enable verbose logging')
 @click.option('--dry-run', is_flag=True,
               help='Show what would be processed without executing')
-def main(input_dir, output_dir, config_file, verbose, dry_run):
+def main(input_path, output_dir, config_file, verbose, dry_run):
     """
     Process video library for institutional knowledge extraction.
     
@@ -54,7 +66,7 @@ def main(input_dir, output_dir, config_file, verbose, dry_run):
         
         # Initialize CLI processor
         processor = VideoProcessorCLI(
-            input_dir=input_dir,
+            input_path=input_path,
             output_dir=output_dir,
             config=config,
             dry_run=dry_run
@@ -64,10 +76,10 @@ def main(input_dir, output_dir, config_file, verbose, dry_run):
         processor.run()
         
     except KeyboardInterrupt:
-        click.echo("\n🛑 Processing interrupted by user", err=True)
+        click.echo("\n[STOP] Processing interrupted by user", err=True)
         sys.exit(1)
     except Exception as e:
-        click.echo(f"\n❌ Error: {str(e)}", err=True)
+        click.echo(f"\n[ERROR] Error: {str(e)}", err=True)
         sys.exit(1)
 
 
