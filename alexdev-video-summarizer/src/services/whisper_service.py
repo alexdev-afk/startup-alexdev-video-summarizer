@@ -84,6 +84,14 @@ class WhisperService:
         self.vad_threshold = self.whisper_config.get('vad_threshold', 0.4)
         self.chunk_threshold = self.whisper_config.get('chunk_threshold', 3.0)
         
+        # Hybrid mode configuration
+        self.use_original_whisper = self.whisper_config.get('use_original_whisper', False)
+        self.enable_silero_vad = self.whisper_config.get('enable_silero_vad', False)
+        self.enable_word_timestamps = self.whisper_config.get('enable_word_timestamps', True)
+        
+        # Sequential model loading for GPU memory management (WhisperX only)
+        self.sequential_model_loading = self.whisper_config.get('sequential_model_loading', False)
+        
         # Diarization configuration
         self.huggingface_token = self.whisper_config.get('huggingface_token')
         self.enable_diarization = self.whisper_config.get('enable_diarization', True)
@@ -92,6 +100,7 @@ class WhisperService:
         
         # Runtime state
         self.whisperx_model = None
+        self.original_whisper_model = None  # Original Whisper model for hybrid mode
         self.diarize_model = None
         self.silero_model = None
         self.silero_utils = None
@@ -118,30 +127,56 @@ class WhisperService:
     def _setup_ffmpeg_path(self):
         """Setup FFmpeg path in environment for Whisper compatibility"""
         import platform
+        import subprocess
+        
+        # First, test if FFmpeg is already available
+        try:
+            subprocess.run(['ffmpeg', '-version'], capture_output=True, check=True)
+            logger.info("FFmpeg already available in PATH")
+            return
+        except (FileNotFoundError, subprocess.CalledProcessError):
+            pass
         
         # Try to find FFmpeg using the same logic as FFmpeg service
         if platform.system() == 'Windows':
             # WinGet installation path
             winget_path = Path.home() / "AppData/Local/Microsoft/WinGet/Packages/Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe/ffmpeg-8.0-full_build/bin/ffmpeg.exe"
             if winget_path.exists():
-                # Add the directory containing ffmpeg.exe to PATH
+                # Add the directory containing ffmpeg.exe to PATH at the beginning
                 ffmpeg_dir = str(winget_path.parent)
-                if ffmpeg_dir not in os.environ.get('PATH', ''):
-                    os.environ['PATH'] = ffmpeg_dir + os.pathsep + os.environ.get('PATH', '')
-                    logger.info(f"Added FFmpeg directory to PATH for Whisper: {ffmpeg_dir}")
-                return
+                current_path = os.environ.get('PATH', '')
+                if ffmpeg_dir not in current_path:
+                    os.environ['PATH'] = ffmpeg_dir + os.pathsep + current_path
+                    logger.info(f"Added FFmpeg directory to PATH for WhisperX: {ffmpeg_dir}")
+                    
+                # Verify FFmpeg is now accessible
+                try:
+                    subprocess.run(['ffmpeg', '-version'], capture_output=True, check=True)
+                    logger.info("FFmpeg PATH setup successful")
+                    return
+                except (FileNotFoundError, subprocess.CalledProcessError):
+                    logger.warning("FFmpeg found but not accessible after PATH setup")
             
             # WinGet Links path
             links_path = Path.home() / "AppData/Local/Microsoft/WinGet/Links/ffmpeg.exe"
             if links_path.exists():
                 ffmpeg_dir = str(links_path.parent)
-                if ffmpeg_dir not in os.environ.get('PATH', ''):
-                    os.environ['PATH'] = ffmpeg_dir + os.pathsep + os.environ.get('PATH', '')
-                    logger.info(f"Added FFmpeg directory to PATH for Whisper: {ffmpeg_dir}")
-                return
+                current_path = os.environ.get('PATH', '')
+                if ffmpeg_dir not in current_path:
+                    os.environ['PATH'] = ffmpeg_dir + os.pathsep + current_path
+                    logger.info(f"Added FFmpeg directory to PATH for WhisperX: {ffmpeg_dir}")
+                    
+                # Verify FFmpeg is now accessible
+                try:
+                    subprocess.run(['ffmpeg', '-version'], capture_output=True, check=True)
+                    logger.info("FFmpeg PATH setup successful")
+                    return
+                except (FileNotFoundError, subprocess.CalledProcessError):
+                    logger.warning("FFmpeg found but not accessible after PATH setup")
         
-        # If ffmpeg not found, log warning but continue
-        logger.warning("FFmpeg not found in common locations. Whisper may fail if ffmpeg is not in PATH.")
+        # If ffmpeg still not found, log error
+        logger.error("FFmpeg not found in common locations and not in PATH. WhisperX will fail without FFmpeg.")
+        raise WhisperError("FFmpeg not found. Install FFmpeg and ensure it's in PATH for WhisperX compatibility.")
     
     def _load_model(self):
         """Load WhisperX and Silero VAD models (lazy loading)"""
@@ -155,8 +190,16 @@ class WhisperService:
             return
         
         try:
-            # Load WhisperX model
-            if WHISPERX_AVAILABLE:
+            # Choose between original Whisper and WhisperX
+            if self.use_original_whisper:
+                # Load original Whisper (GPU compatible)
+                logger.info(f"Loading original Whisper model: {self.model_size}")
+                import whisper
+                self.original_whisper_model = whisper.load_model(self.model_size, device=self.device)
+                logger.info("Original Whisper model loaded successfully on GPU")
+            
+            elif WHISPERX_AVAILABLE:
+                # Load WhisperX model (fallback mode)
                 logger.info(f"Loading WhisperX model: {self.model_size}")
                 
                 # Set compute type based on device
@@ -171,25 +214,31 @@ class WhisperService:
                     compute_type=compute_type
                 )
                 
-                # Load diarization model if enabled and token available
-                if self.enable_diarization and self.huggingface_token:
-                    try:
-                        self.diarize_model = whisperx.diarize.DiarizationPipeline(
-                            use_auth_token=self.huggingface_token,
-                            device=self.device
-                        )
-                        logger.info("WhisperX model and diarization pipeline loaded successfully")
-                        logger.info(f"Diarization enabled: speakers {self.min_speakers}-{self.max_speakers}")
-                    except Exception as e:
-                        logger.warning(f"Diarization pipeline failed to load: {e}")
-                        logger.info("WhisperX model loaded successfully (without diarization)")
+                # Sequential loading: Only load diarization if not using sequential mode
+                if not self.sequential_model_loading:
+                    # Load diarization model immediately (original behavior)
+                    if self.enable_diarization and self.huggingface_token:
+                        try:
+                            self.diarize_model = whisperx.diarize.DiarizationPipeline(
+                                use_auth_token=self.huggingface_token,
+                                device=self.device
+                            )
+                            logger.info("WhisperX model and diarization pipeline loaded successfully")
+                            logger.info(f"Diarization enabled: speakers {self.min_speakers}-{self.max_speakers}")
+                        except Exception as e:
+                            logger.warning(f"Diarization pipeline failed to load: {e}")
+                            logger.info("WhisperX model loaded successfully (without diarization)")
+                            self.diarize_model = None
+                    elif not self.huggingface_token and self.enable_diarization:
+                        logger.warning("Diarization enabled but no Hugging Face token provided")
+                        logger.info("Set 'huggingface_token' in config for speaker diarization")
                         self.diarize_model = None
-                elif not self.huggingface_token and self.enable_diarization:
-                    logger.warning("Diarization enabled but no Hugging Face token provided")
-                    logger.info("Set 'huggingface_token' in config for speaker diarization")
-                    self.diarize_model = None
+                    else:
+                        logger.info("WhisperX model loaded (diarization disabled in config)")
+                        self.diarize_model = None
                 else:
-                    logger.info("WhisperX model loaded (diarization disabled in config)")
+                    # Sequential loading: Defer diarization model loading
+                    logger.info("WhisperX model loaded successfully (sequential mode - diarization deferred)")
                     self.diarize_model = None
             else:
                 # Fallback to original Whisper
@@ -214,6 +263,36 @@ class WhisperService:
             )
         except Exception as e:
             raise WhisperError(f"Failed to load models: {str(e)}") from e
+    
+    def _load_diarization_model(self):
+        """Load diarization model for sequential processing"""
+        if self.diarize_model or not self.huggingface_token:
+            return
+            
+        try:
+            logger.info("Loading diarization model for sequential processing...")
+            self.diarize_model = whisperx.diarize.DiarizationPipeline(
+                use_auth_token=self.huggingface_token,
+                device=self.device
+            )
+            logger.info(f"Diarization model loaded: speakers {self.min_speakers}-{self.max_speakers}")
+        except Exception as e:
+            logger.warning(f"Failed to load diarization model: {e}")
+            self.diarize_model = None
+    
+    def _unload_diarization_model(self):
+        """Unload diarization model to free VRAM"""
+        if self.diarize_model:
+            logger.info("Unloading diarization model to free VRAM...")
+            del self.diarize_model
+            self.diarize_model = None
+            
+            # GPU memory cleanup
+            if self.device == 'cuda' and TORCH_AVAILABLE:
+                import torch
+                torch.cuda.empty_cache()
+                gc.collect()
+                logger.debug("GPU memory cleared after diarization model unload")
     
     def transcribe_audio(self, audio_path: Path, scene_info: Optional[Dict] = None) -> Dict[str, Any]:
         """
@@ -266,10 +345,19 @@ class WhisperService:
             )
             
             # STAGE 4: Apply speaker diarization if available
-            if self.diarize_model and WHISPERX_AVAILABLE:
-                reconstructed_segments = self._apply_speaker_diarization(
-                    audio_path, reconstructed_segments
-                )
+            if self.enable_diarization and WHISPERX_AVAILABLE:
+                # Load diarization model if using sequential loading
+                if self.sequential_model_loading and not self.diarize_model:
+                    self._load_diarization_model()
+                
+                if self.diarize_model:
+                    reconstructed_segments = self._apply_speaker_diarization(
+                        audio_path, reconstructed_segments
+                    )
+                    
+                    # Unload diarization model if using sequential loading
+                    if self.sequential_model_loading:
+                        self._unload_diarization_model()
             
             processing_time = time.time() - start_time
             
@@ -458,18 +546,38 @@ class WhisperService:
                 # Fallback - extract chunk from original file
                 self._extract_audio_chunk(audio_path, temp_chunk_path, vad_chunk)
             
-            # Transcribe with WhisperX or fallback Whisper
-            if WHISPERX_AVAILABLE and hasattr(self.whisperx_model, 'transcribe'):
+            # Choose transcription method based on hybrid mode
+            if self.use_original_whisper and self.original_whisper_model:
+                # Original Whisper transcription (hybrid mode)
+                logger.debug("Using original Whisper for transcription")
+                transcription_options = {
+                    'task': 'transcribe',
+                    'word_timestamps': self.enable_word_timestamps,
+                    'condition_on_previous_text': False,
+                    'temperature': 0,
+                    'no_speech_threshold': 0.6,
+                }
+                
+                # Set language if not auto-detect
+                if self.language != 'auto':
+                    transcription_options['language'] = self.language
+                    
+                result = self.original_whisper_model.transcribe(str(temp_chunk_path), **transcription_options)
+                
+            elif WHISPERX_AVAILABLE and hasattr(self.whisperx_model, 'transcribe'):
                 # WhisperX transcription
                 result = self.whisperx_model.transcribe(str(temp_chunk_path))
                 
-                # WhisperX alignment for better word timestamps
-                if hasattr(whisperx, 'load_align_model'):
+                # WhisperX alignment for better word timestamps (optional)
+                if self.enable_word_alignment and hasattr(whisperx, 'load_align_model'):
+                    logger.debug("Loading alignment model for word-level timestamps")
                     align_model, metadata = whisperx.load_align_model(
                         language_code=result.get("language", "en"), 
                         device=self.device
                     )
                     result = whisperx.align(result["segments"], align_model, metadata, str(temp_chunk_path), self.device)
+                else:
+                    logger.debug("Word alignment disabled - using segment-level timestamps only")
                     
             else:
                 # Fallback to original Whisper

@@ -68,15 +68,22 @@ gpu_pipeline:
     gpu: true
     confidence_threshold: 0.5
     
-  # Whisper Settings (WhisperX + Silero VAD + pyannote diarization)
+  # Whisper Settings (Hybrid: Original Whisper GPU + WhisperX features)
   whisper:
     model_size: "large-v2"      # large-v2 for best accuracy
-    device: "auto"
+    device: "cuda"              # GPU with original Whisper
     language: "en"              # Force English to prevent translation
+    
+    # Hybrid mode: Use original Whisper with WhisperX features
+    use_original_whisper: true  # Fallback to original Whisper for GPU compatibility
+    enable_silero_vad: true     # Add Silero VAD for better segmentation
     
     # VAD Settings (Voice Activity Detection)
     vad_threshold: 0.4          # Silero VAD sensitivity (0.1-0.9)
     chunk_threshold: 3.0        # Split chunks on gaps > 3 seconds
+    
+    # Word timestamps (original Whisper supports this)
+    enable_word_timestamps: true # Enable word-level timestamps
     
     # Speaker Diarization (requires Hugging Face token)
     huggingface_token: "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"  # HF token for speaker diarization
