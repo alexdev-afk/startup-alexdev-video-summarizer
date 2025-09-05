@@ -57,6 +57,9 @@ class PyAudioAnalysisService:
         self.pyaudio_config = config.get('cpu_pipeline', {}).get('pyaudioanalysis', {})
         self.development_config = config.get('development', {})
         
+        # Output mode configuration
+        self.output_mode = self.pyaudio_config.get('output_mode', 'interpretive')  # "numerical", "interpretive", "both"
+        
         # Audio processing configuration
         self.window_size = self.pyaudio_config.get('window_size', 0.050)  # 50ms
         self.step_size = self.pyaudio_config.get('step_size', 0.025)     # 25ms
@@ -67,7 +70,7 @@ class PyAudioAnalysisService:
         self.enable_emotion_analysis = self.pyaudio_config.get('emotion_analysis', True)
         self.enable_classification = self.pyaudio_config.get('classification', True)
         
-        logger.info(f"pyAudioAnalysis service initialized - window: {self.window_size}s, available: {PYAUDIOANALYSIS_AVAILABLE}")
+        logger.info(f"pyAudioAnalysis service initialized - window: {self.window_size}s, available: {PYAUDIOANALYSIS_AVAILABLE}, mode: {self.output_mode}")
     
     def analyze_whisper_segments(self, audio_path: str, whisper_result: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -114,8 +117,8 @@ class PyAudioAnalysisService:
                         'duration': whisper_segment['end'] - whisper_segment['start'],
                         'speaker': whisper_segment.get('speaker', 'Unknown'),
                         
-                        # Generate interpretive analysis (replaces raw numerical features)
-                        **self._create_interpretive_segment_analysis(segment_audio, sample_rate, whisper_segment)
+                        # Generate analysis based on output mode
+                        **self._create_segment_analysis(segment_audio, sample_rate, whisper_segment)
                     }
                 
                 segment_analyses.append(segment_analysis)
@@ -1032,26 +1035,51 @@ class PyAudioAnalysisService:
         else:
             return data
 
-    def _create_interpretive_segment_analysis(self, audio_data: np.ndarray, sample_rate: int, whisper_segment: Dict) -> Dict[str, Any]:
-        """Create comprehensive interpretive analysis replacing all numerical metrics"""
+    def _create_segment_analysis(self, audio_data: np.ndarray, sample_rate: int, whisper_segment: Dict) -> Dict[str, Any]:
+        """Create segment analysis based on configured output mode"""
         if len(audio_data) == 0:
-            return self._create_fallback_interpretive_analysis(whisper_segment)
+            return self._create_fallback_analysis(whisper_segment)
         
         try:
-            # Extract raw features for interpretation
+            # Extract raw features (used by all modes)
             raw_features = self._extract_raw_features_for_interpretation(audio_data, sample_rate)
             
-            # Transform into interpretive characterizations
-            return {
-                'audio_environment': self._interpret_recording_environment(raw_features),
-                'voice_characteristics': self._interpret_vocal_delivery(raw_features),
-                'communication_style': self._interpret_speaking_patterns(raw_features),
-                'delivery_assessment': self._interpret_presentation_quality(raw_features, whisper_segment)
-            }
-            
+            # Generate output based on mode
+            if self.output_mode == "numerical":
+                return self._create_numerical_analysis(audio_data, sample_rate)
+            elif self.output_mode == "interpretive":
+                return self._create_interpretive_analysis(raw_features, whisper_segment)
+            elif self.output_mode == "both":
+                numerical = self._create_numerical_analysis(audio_data, sample_rate)
+                interpretive = self._create_interpretive_analysis(raw_features, whisper_segment)
+                return {**numerical, **interpretive}
+            else:
+                logger.warning(f"Unknown output_mode: {self.output_mode}, defaulting to interpretive")
+                return self._create_interpretive_analysis(raw_features, whisper_segment)
+                
         except Exception as e:
-            logger.warning(f"Interpretive analysis failed: {e}")
-            return self._create_fallback_interpretive_analysis(whisper_segment, str(e))
+            logger.warning(f"Segment analysis failed: {e}")
+            return self._create_fallback_analysis(whisper_segment, str(e))
+
+    def _create_interpretive_analysis(self, raw_features: Dict[str, float], whisper_segment: Dict) -> Dict[str, Any]:
+        """Create interpretive analysis from raw features"""
+        return {
+            'audio_environment': self._interpret_recording_environment(raw_features),
+            'voice_characteristics': self._interpret_vocal_delivery(raw_features),
+            'communication_style': self._interpret_speaking_patterns(raw_features),
+            'delivery_assessment': self._interpret_presentation_quality(raw_features, whisper_segment)
+        }
+
+    def _create_numerical_analysis(self, audio_data: np.ndarray, sample_rate: int) -> Dict[str, Any]:
+        """Create traditional numerical analysis (legacy mode)"""
+        return {
+            'emotion_analysis': self._analyze_emotion(audio_data, sample_rate),
+            'speaker_characteristics': self._analyze_speaker_characteristics(audio_data, sample_rate),
+            'audio_classification': self._classify_audio_content(audio_data, sample_rate),
+            'prosodic_features': self._extract_prosodic_features(audio_data, sample_rate),
+            'segment_68_features': self._extract_68_features(audio_data, sample_rate),
+            'segment_statistics': self._compute_summary_statistics(audio_data, sample_rate)
+        }
 
     def _extract_raw_features_for_interpretation(self, audio_data: np.ndarray, sample_rate: int) -> Dict[str, float]:
         """Extract only the raw features needed for interpretation (internal use)"""
@@ -1254,6 +1282,19 @@ class PyAudioAnalysisService:
             'presentation_professionalism': professionalism
         }
 
+    def _create_fallback_analysis(self, whisper_segment: Dict, error: Optional[str] = None) -> Dict[str, Any]:
+        """Unified fallback analysis based on output mode"""
+        if self.output_mode == "numerical":
+            return self._create_fallback_numerical_analysis(whisper_segment, error)
+        elif self.output_mode == "interpretive":
+            return self._create_fallback_interpretive_analysis(whisper_segment, error)
+        elif self.output_mode == "both":
+            numerical = self._create_fallback_numerical_analysis(whisper_segment, error)
+            interpretive = self._create_fallback_interpretive_analysis(whisper_segment, error)
+            return {**numerical, **interpretive}
+        else:
+            return self._create_fallback_interpretive_analysis(whisper_segment, error)
+
     def _create_fallback_interpretive_analysis(self, whisper_segment: Dict, error: Optional[str] = None) -> Dict[str, Any]:
         """Fallback interpretive analysis when processing fails"""
         text_length = len(whisper_segment.get('text', ''))
@@ -1280,6 +1321,19 @@ class PyAudioAnalysisService:
                 'presentation_professionalism': 'Quality assessment unavailable'
             },
             'analysis_note': f"Audio analysis failed: {error}" if error else "Audio processing tools unavailable"
+        }
+
+    def _create_fallback_numerical_analysis(self, whisper_segment: Dict, error: Optional[str] = None) -> Dict[str, Any]:
+        """Fallback numerical analysis when processing fails"""
+        return {
+            'emotion_analysis': {'emotion': 'neutral', 'confidence': 0.0},
+            'speaker_characteristics': {'voice_quality': 'unknown'},
+            'audio_classification': {'type': 'speech', 'confidence': 0.5},
+            'prosodic_features': {},
+            'segment_68_features': self._generate_mock_68_features(),
+            'segment_statistics': {'mean_energy': 0.0, 'std_energy': 0.0},
+            'fallback_mode': True,
+            'error': error or 'Audio processing tools unavailable'
         }
 
     def _identify_dominant_pattern(self, pattern_list: List[str], fallback: str) -> str:
