@@ -80,10 +80,17 @@ gpu_pipeline:
     
     # VAD Settings (Voice Activity Detection)
     vad_threshold: 0.4          # Silero VAD sensitivity (0.1-0.9)
-    chunk_threshold: 3.0        # Split chunks on gaps > 3 seconds
+    chunk_threshold: 3.0        # Split chunks on gaps > 3 seconds (legacy setting)
     
     # Word timestamps (original Whisper supports this)
     enable_word_timestamps: true # Enable word-level timestamps
+    enable_word_alignment: true  # Enable WhisperX word alignment when available
+    
+    # Advanced Chunking for Advertisement Content
+    chunking_strategy: "multi_strategy"  # Options: 'gap_based', 'duration_based', 'multi_strategy'
+    max_chunk_duration: 20.0    # Maximum chunk duration (seconds) - prevents very long chunks
+    min_chunk_duration: 5.0     # Minimum chunk duration (seconds) - merges very short chunks
+    energy_based_splitting: true # Enable energy-based splitting at natural breaks
     
     # Speaker Diarization (requires Hugging Face token)
     huggingface_token: "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"  # HF token for speaker diarization
@@ -111,6 +118,24 @@ cpu_pipeline:
     sample_rate: 22050
     hop_length: 512
     n_mfcc: 13
+    
+    # Smart Music Segmentation (detects style changes automatically)
+    enable_music_segmentation: true   # Enable music-based analysis segmentation
+    adaptive_segmentation: true       # Use smart boundary detection vs fixed-time
+    
+    # Smart segmentation parameters
+    min_segment_length: 3.0          # Minimum segment duration (seconds)
+    max_segment_length: 30.0         # Maximum segment duration (seconds)
+    
+    # Feature change detection thresholds
+    spectral_change_threshold: 0.3   # Sensitivity for musical style changes
+    tempo_change_threshold: 10.0     # BPM change threshold for rhythm detection
+    harmonic_change_threshold: 0.4   # Chord/key change sensitivity
+    energy_change_threshold: 0.5     # Volume/dynamics change sensitivity
+    
+    # Fixed segmentation fallback (when smart detection disabled)
+    segment_length: 10.0             # Fixed segment duration (seconds)
+    segment_overlap: 2.0             # Overlap between segments (seconds)
     
   # pyAudioAnalysis Settings
   pyaudioanalysis:

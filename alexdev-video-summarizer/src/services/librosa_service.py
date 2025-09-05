@@ -21,6 +21,7 @@ except ImportError:
     LIBROSA_AVAILABLE = False
 
 from utils.logger import get_logger
+from .music_segmentation import SmartMusicSegmentation
 
 logger = get_logger(__name__)
 
@@ -56,49 +57,66 @@ class LibROSAService:
         self.harmonic_analysis = self.librosa_config.get('harmonic_analysis', True)
         self.spectral_features = self.librosa_config.get('spectral_features', True)
         
-        logger.info(f"LibROSA service initialized - sample_rate: {self.sample_rate}, available: {LIBROSA_AVAILABLE}")
+        # Music-based segmentation settings
+        self.enable_music_segmentation = self.librosa_config.get('enable_music_segmentation', True)
+        self.segment_length = self.librosa_config.get('segment_length', 10.0)  # 10-second segments
+        self.segment_overlap = self.librosa_config.get('segment_overlap', 2.0)  # 2-second overlap
+        self.adaptive_segmentation = self.librosa_config.get('adaptive_segmentation', True)
+        
+        # Initialize smart music segmentation
+        self.smart_segmentation = SmartMusicSegmentation(config) if self.enable_music_segmentation else None
+        
+        segmentation_mode = "smart" if self.smart_segmentation else "fixed" if self.enable_music_segmentation else "disabled"
+        logger.info(f"LibROSA service initialized - sample_rate: {self.sample_rate}, segmentation: {segmentation_mode}, available: {LIBROSA_AVAILABLE}")
     
     def analyze_audio_segment(self, audio_path: str, scene_info: Optional[Dict] = None) -> Dict[str, Any]:
         """
-        Analyze audio segment with comprehensive feature extraction
+        Analyze audio with music-based segmentation and comprehensive feature extraction
         
         Args:
             audio_path: Path to audio file (FFmpeg-prepared WAV)
             scene_info: Scene boundary information for context preservation
             
         Returns:
-            Comprehensive music analysis results
+            Comprehensive music analysis results with segmentation
         """
         start_time = time.time()
         
         try:
-            # Extract audio segment for scene if boundaries provided
-            if scene_info and 'start_seconds' in scene_info and 'end_seconds' in scene_info:
-                audio_data = self._extract_scene_audio(audio_path, scene_info)
-            else:
-                audio_data = self._load_full_audio(audio_path)
+            # Load full audio for music-based segmentation
+            audio_data = self._load_full_audio(audio_path)
             
             if audio_data is None:
                 return self._fallback_analysis_result(scene_info)
             
-            # Comprehensive music analysis
-            results = {
-                'tempo_analysis': self._analyze_tempo(audio_data),
-                'spectral_features': self._extract_spectral_features(audio_data),
-                'harmonic_features': self._extract_harmonic_features(audio_data),
-                'rhythmic_features': self._extract_rhythmic_features(audio_data),
-                'audio_classification': self._classify_audio_content(audio_data),
+            # Perform music-based segmentation if enabled
+            if self.enable_music_segmentation:
+                if self.smart_segmentation and self.adaptive_segmentation:
+                    # Use smart music boundary detection
+                    segment_results = self._analyze_with_smart_segmentation(audio_data, audio_path)
+                else:
+                    # Use fixed-time segmentation
+                    segment_results = self._analyze_with_music_segmentation(audio_data, audio_path)
+            else:
+                # Fallback to single-segment analysis
+                segment_results = [self._analyze_single_segment(audio_data, 0, len(audio_data) / self.sample_rate)]
+            
+            # Aggregate results from all segments
+            aggregated_results = self._aggregate_segment_results(segment_results, audio_data)
+            aggregated_results.update({
                 'processing_time': time.time() - start_time,
                 'scene_context': scene_info,
-                'sample_rate': self.sample_rate
-            }
+                'sample_rate': self.sample_rate,
+                'segmentation_enabled': self.enable_music_segmentation,
+                'total_segments': len(segment_results)
+            })
             
-            logger.debug(f"LibROSA analysis complete - tempo: {results['tempo_analysis'].get('tempo', 'N/A')}")
+            logger.debug(f"LibROSA analysis complete - {len(segment_results)} segments, tempo: {aggregated_results.get('tempo_analysis', {}).get('tempo', 'N/A')}")
             
             # Save analysis to intermediate file
-            self._save_analysis_to_file(audio_path, results)
+            self._save_analysis_to_file(audio_path, aggregated_results)
             
-            return results
+            return aggregated_results
             
         except Exception as e:
             logger.error(f"LibROSA analysis failed: {e}")
@@ -108,6 +126,236 @@ class LibROSAService:
             self._save_analysis_to_file(audio_path, fallback_result)
             
             return fallback_result
+    
+    def _analyze_with_smart_segmentation(self, audio_data: np.ndarray, audio_path: str) -> List[Dict[str, Any]]:
+        """
+        Perform smart music segmentation based on acoustic feature changes
+        
+        Returns:
+            List of analysis results for each detected music segment
+        """
+        try:
+            logger.info("Using smart music segmentation based on acoustic feature changes")
+            
+            # Detect music boundaries using smart segmentation
+            segments = self.smart_segmentation.detect_music_boundaries(audio_data)
+            segment_results = []
+            
+            logger.info(f"Smart segmentation detected {len(segments)} music boundaries from {len(audio_data) / self.sample_rate:.1f}s audio")
+            
+            for i, (start_idx, end_idx, start_time, end_time) in enumerate(segments):
+                segment_audio = audio_data[start_idx:end_idx]
+                
+                if len(segment_audio) > 0:
+                    segment_result = self._analyze_single_segment(segment_audio, start_time, end_time)
+                    segment_result.update({
+                        'segment_id': i,
+                        'start_time': start_time,
+                        'end_time': end_time,
+                        'duration': end_time - start_time,
+                        'segmentation_method': 'smart_acoustic_detection'
+                    })
+                    segment_results.append(segment_result)
+            
+            return segment_results
+            
+        except Exception as e:
+            logger.error(f"Smart music segmentation failed: {e}, falling back to fixed segmentation")
+            return self._analyze_with_music_segmentation(audio_data, audio_path)
+    
+    def _analyze_with_music_segmentation(self, audio_data: np.ndarray, audio_path: str) -> List[Dict[str, Any]]:
+        """
+        Perform music-based segmentation and analyze each segment
+        
+        Returns:
+            List of analysis results for each music segment
+        """
+        if not LIBROSA_AVAILABLE:
+            logger.warning("LibROSA not available, using single-segment fallback")
+            return [self._analyze_single_segment(audio_data, 0, len(audio_data) / self.sample_rate)]
+        
+        try:
+            # Create overlapping segments
+            segments = self._create_music_segments(audio_data)
+            segment_results = []
+            
+            logger.info(f"Music-based segmentation: {len(segments)} segments from {len(audio_data) / self.sample_rate:.1f}s audio")
+            
+            for i, (start_idx, end_idx, start_time, end_time) in enumerate(segments):
+                segment_audio = audio_data[start_idx:end_idx]
+                
+                if len(segment_audio) > 0:
+                    segment_result = self._analyze_single_segment(segment_audio, start_time, end_time)
+                    segment_result.update({
+                        'segment_id': i,
+                        'start_time': start_time,
+                        'end_time': end_time,
+                        'duration': end_time - start_time
+                    })
+                    segment_results.append(segment_result)
+            
+            return segment_results
+            
+        except Exception as e:
+            logger.error(f"Music segmentation failed: {e}, using single segment")
+            return [self._analyze_single_segment(audio_data, 0, len(audio_data) / self.sample_rate)]
+    
+    def _create_music_segments(self, audio_data: np.ndarray) -> List[Tuple[int, int, float, float]]:
+        """
+        Create overlapping segments for music analysis
+        
+        Returns:
+            List of (start_idx, end_idx, start_time, end_time) tuples
+        """
+        duration_seconds = len(audio_data) / self.sample_rate
+        segment_length_samples = int(self.segment_length * self.sample_rate)
+        overlap_samples = int(self.segment_overlap * self.sample_rate)
+        step_samples = segment_length_samples - overlap_samples
+        
+        segments = []
+        start_idx = 0
+        
+        while start_idx < len(audio_data):
+            end_idx = min(start_idx + segment_length_samples, len(audio_data))
+            start_time = start_idx / self.sample_rate
+            end_time = end_idx / self.sample_rate
+            
+            segments.append((start_idx, end_idx, start_time, end_time))
+            
+            # Break if we've reached the end
+            if end_idx >= len(audio_data):
+                break
+            
+            start_idx += step_samples
+        
+        # Ensure we cover the entire audio file
+        if segments and segments[-1][1] < len(audio_data):
+            # Extend the last segment to cover remaining audio
+            last_start_idx, _, last_start_time, _ = segments[-1]
+            segments[-1] = (last_start_idx, len(audio_data), last_start_time, duration_seconds)
+        
+        logger.debug(f"Created {len(segments)} music segments with {self.segment_overlap}s overlap")
+        return segments
+    
+    def _analyze_single_segment(self, audio_data: np.ndarray, start_time: float, end_time: float) -> Dict[str, Any]:
+        """
+        Analyze a single audio segment with all features
+        
+        Args:
+            audio_data: Audio data for this segment
+            start_time: Segment start time in seconds
+            end_time: Segment end time in seconds
+            
+        Returns:
+            Analysis results for this segment
+        """
+        try:
+            segment_results = {
+                'tempo_analysis': self._analyze_tempo(audio_data),
+                'spectral_features': self._extract_spectral_features(audio_data),
+                'harmonic_features': self._extract_harmonic_features(audio_data),
+                'rhythmic_features': self._extract_rhythmic_features(audio_data),
+                'audio_classification': self._classify_audio_content(audio_data),
+                'segment_timing': {
+                    'start': start_time,
+                    'end': end_time,
+                    'duration': end_time - start_time
+                }
+            }
+            return segment_results
+            
+        except Exception as e:
+            logger.warning(f"Single segment analysis failed: {e}")
+            return self._fallback_segment_result(start_time, end_time)
+    
+    def _aggregate_segment_results(self, segment_results: List[Dict[str, Any]], full_audio: np.ndarray) -> Dict[str, Any]:
+        """
+        Aggregate results from multiple music segments
+        
+        Args:
+            segment_results: List of individual segment analysis results
+            full_audio: Full audio data for overall analysis
+            
+        Returns:
+            Aggregated analysis results
+        """
+        if not segment_results:
+            return self._fallback_analysis_result()
+        
+        try:
+            # Aggregate tempo analysis - use median tempo for stability
+            tempos = [seg.get('tempo_analysis', {}).get('tempo', 120) for seg in segment_results]
+            valid_tempos = [t for t in tempos if t and t > 0]
+            
+            aggregated_tempo = {
+                'tempo': np.median(valid_tempos) if valid_tempos else 120.0,
+                'tempo_variation': float(np.std(valid_tempos)) if len(valid_tempos) > 1 else 0.0,
+                'tempo_range': [float(min(valid_tempos)), float(max(valid_tempos))] if valid_tempos else [120.0, 120.0],
+                'segment_tempos': tempos
+            }
+            
+            # Aggregate spectral features - use mean values
+            spectral_centroids = [seg.get('spectral_features', {}).get('spectral_centroid_mean', 2500) for seg in segment_results]
+            aggregated_spectral = {
+                'spectral_centroid_mean': float(np.mean(spectral_centroids)),
+                'spectral_centroid_variation': float(np.std(spectral_centroids)),
+                'segment_spectral_centroids': spectral_centroids
+            }
+            
+            # Aggregate classification - use majority vote for type
+            types = [seg.get('audio_classification', {}).get('type', 'unknown') for seg in segment_results]
+            type_counts = {}
+            for t in types:
+                type_counts[t] = type_counts.get(t, 0) + 1
+            dominant_type = max(type_counts.keys(), key=lambda x: type_counts[x]) if type_counts else 'unknown'
+            
+            aggregated_classification = {
+                'type': dominant_type,
+                'type_confidence': type_counts[dominant_type] / len(types) if types else 0.0,
+                'segment_types': types,
+                'type_distribution': type_counts
+            }
+            
+            # Create comprehensive aggregated result
+            aggregated_result = {
+                'tempo_analysis': aggregated_tempo,
+                'spectral_features': aggregated_spectral,
+                'audio_classification': aggregated_classification,
+                'segment_analysis': segment_results,  # Keep individual segment results
+                'music_segmentation': {
+                    'enabled': True,
+                    'segment_count': len(segment_results),
+                    'segment_length': self.segment_length,
+                    'segment_overlap': self.segment_overlap,
+                    'total_duration': len(full_audio) / self.sample_rate
+                }
+            }
+            
+            logger.debug(f"Aggregated {len(segment_results)} segments - dominant type: {dominant_type}, avg tempo: {aggregated_tempo['tempo']:.1f}")
+            return aggregated_result
+            
+        except Exception as e:
+            logger.error(f"Results aggregation failed: {e}")
+            # Fallback to first segment results
+            if segment_results:
+                return segment_results[0]
+            return self._fallback_analysis_result()
+    
+    def _fallback_segment_result(self, start_time: float, end_time: float) -> Dict[str, Any]:
+        """Fallback result for single segment when analysis fails"""
+        return {
+            'tempo_analysis': {'tempo': 120.0, 'tempo_confidence': 0.0},
+            'spectral_features': {'spectral_centroid_mean': 2500.0},
+            'harmonic_features': {'harmonic_energy_ratio': 0.5},
+            'rhythmic_features': {'rhythm_strength': 0.5},
+            'audio_classification': {'type': 'unknown', 'mood': 'neutral'},
+            'segment_timing': {
+                'start': start_time,
+                'end': end_time,
+                'duration': end_time - start_time
+            },
+            'fallback_mode': True
+        }
     
     def _extract_scene_audio(self, audio_path: str, scene_info: Dict) -> Optional[np.ndarray]:
         """Extract specific scene audio segment"""

@@ -52,6 +52,7 @@ except ImportError:
         return None, None
 
 from utils.logger import get_logger
+from .whisper_vad_chunking import AdvancedVADChunking
 
 logger = get_logger(__name__)
 
@@ -84,10 +85,17 @@ class WhisperService:
         self.vad_threshold = self.whisper_config.get('vad_threshold', 0.4)
         self.chunk_threshold = self.whisper_config.get('chunk_threshold', 3.0)
         
+        # Advertisement-optimized chunking settings
+        self.chunking_strategy = self.whisper_config.get('chunking_strategy', 'multi_strategy')  # 'gap_based', 'duration_based', 'multi_strategy'
+        self.max_chunk_duration = self.whisper_config.get('max_chunk_duration', 20.0)  # 20 seconds for ads
+        self.min_chunk_duration = self.whisper_config.get('min_chunk_duration', 5.0)   # 5 seconds minimum
+        self.energy_based_splitting = self.whisper_config.get('energy_based_splitting', True)
+        
         # Hybrid mode configuration
         self.use_original_whisper = self.whisper_config.get('use_original_whisper', False)
         self.enable_silero_vad = self.whisper_config.get('enable_silero_vad', False)
         self.enable_word_timestamps = self.whisper_config.get('enable_word_timestamps', True)
+        self.enable_word_alignment = self.whisper_config.get('enable_word_alignment', True)
         
         # Sequential model loading for GPU memory management (WhisperX only)
         self.sequential_model_loading = self.whisper_config.get('sequential_model_loading', False)
@@ -421,39 +429,25 @@ class WhisperService:
                 if i > 0 and timestamp["start"] < speech_timestamps[i - 1]["end"]:
                     timestamp["start"] = speech_timestamps[i - 1]["end"]
             
-            # Group speech segments, splitting on long gaps
-            chunk_threshold_samples = int(self.chunk_threshold * VAD_SR)
-            vad_chunks = [[]]
-            
-            for timestamp in speech_timestamps:
-                # If gap is longer than chunk_threshold, start new chunk
-                if (len(vad_chunks[-1]) > 0 and 
-                    timestamp["start"] > vad_chunks[-1][-1]["end"] + chunk_threshold_samples):
-                    vad_chunks.append([])
-                
-                vad_chunks[-1].append(timestamp)
-            
-            # Convert to our format with whole-file timestamps and audio data
+            # Process each VAD region as its own chunk (simplified approach)
+            # No grouping - each VAD region becomes one chunk for individual Whisper processing
             processed_chunks = []
-            for chunk_idx, chunk_timestamps in enumerate(vad_chunks):
-                if not chunk_timestamps:
-                    continue
+            for region_idx, timestamp in enumerate(speech_timestamps):
+                # Each region becomes one chunk
+                chunk_timestamps = [timestamp]
                 
-                # Collect audio data for this chunk
+                # Collect audio data for this region
                 chunk_audio = collect_chunks(chunk_timestamps, wav)
                 
-                # Calculate chunk timing in whole-file context
-                chunk_start_seconds = chunk_timestamps[0]["start"] / VAD_SR
-                chunk_end_seconds = chunk_timestamps[-1]["end"] / VAD_SR
+                # Calculate region timing in whole-file context
+                chunk_start_seconds = timestamp["start"] / VAD_SR
+                chunk_end_seconds = timestamp["end"] / VAD_SR
                 
-                # Calculate offset tracking for timestamp reconstruction
+                # Offset is just the start time (no complex calculation needed)
                 offset = chunk_start_seconds
-                for i, ts in enumerate(chunk_timestamps):
-                    if i > 0:
-                        offset += (ts["start"] - chunk_timestamps[i-1]["end"]) / VAD_SR
                 
                 processed_chunks.append({
-                    'chunk_id': chunk_idx,
+                    'chunk_id': region_idx,
                     'start_seconds': chunk_start_seconds,
                     'end_seconds': chunk_end_seconds,
                     'duration': chunk_end_seconds - chunk_start_seconds,
@@ -461,9 +455,9 @@ class WhisperService:
                     'offset': offset,
                     'vad_segments': [
                         {
-                            'start': ts["start"] / VAD_SR,
-                            'end': ts["end"] / VAD_SR
-                        } for ts in chunk_timestamps
+                            'start': timestamp["start"] / VAD_SR,
+                            'end': timestamp["end"] / VAD_SR
+                        }
                     ],
                     'sampling_rate': VAD_SR
                 })
@@ -570,12 +564,16 @@ class WhisperService:
                 
                 # WhisperX alignment for better word timestamps (optional)
                 if self.enable_word_alignment and hasattr(whisperx, 'load_align_model'):
-                    logger.debug("Loading alignment model for word-level timestamps")
-                    align_model, metadata = whisperx.load_align_model(
-                        language_code=result.get("language", "en"), 
-                        device=self.device
-                    )
-                    result = whisperx.align(result["segments"], align_model, metadata, str(temp_chunk_path), self.device)
+                    try:
+                        logger.debug("Loading alignment model for word-level timestamps")
+                        align_model, metadata = whisperx.load_align_model(
+                            language_code=result.get("language", "en"), 
+                            device=self.device
+                        )
+                        result = whisperx.align(result["segments"], align_model, metadata, str(temp_chunk_path), self.device)
+                        logger.debug("Word alignment completed successfully")
+                    except Exception as e:
+                        logger.warning(f"Word alignment failed, using segment-level timestamps: {e}")
                 else:
                     logger.debug("Word alignment disabled - using segment-level timestamps only")
                     
@@ -769,7 +767,13 @@ class WhisperService:
             }
             
             # Apply speaker assignment using WhisperX
-            result_with_speakers = whisperx.assign_word_speakers(diarize_segments, whisperx_result)
+            try:
+                result_with_speakers = whisperx.assign_word_speakers(diarize_segments, whisperx_result)
+                logger.debug("Speaker assignment completed successfully")
+            except Exception as e:
+                logger.warning(f"Speaker assignment failed, using diarization segments only: {e}")
+                # Fallback: manually assign speakers based on diarization segments
+                result_with_speakers = self._manual_speaker_assignment(diarize_segments, whisperx_result)
             
             # Update our segments with speaker information
             for i, whisperx_segment in enumerate(result_with_speakers['segments']):
@@ -801,6 +805,56 @@ class WhisperService:
             segments = self._fallback_speaker_assignment(segments)
         
         return segments
+    
+    def _manual_speaker_assignment(self, diarize_segments: Dict, whisperx_result: Dict) -> Dict:
+        """
+        Manual speaker assignment when WhisperX assign_word_speakers fails
+        """
+        try:
+            # Extract speaker segments from diarization result
+            speaker_timeline = []
+            for segment in diarize_segments:
+                speaker_timeline.append({
+                    'start': segment['start'],
+                    'end': segment['end'],
+                    'speaker': segment['speaker']
+                })
+            
+            # Sort by start time
+            speaker_timeline.sort(key=lambda x: x['start'])
+            
+            # Assign speakers to whisperx segments based on temporal overlap
+            result_segments = []
+            for whisperx_segment in whisperx_result['segments']:
+                seg_start = whisperx_segment['start']
+                seg_end = whisperx_segment['end']
+                seg_midpoint = (seg_start + seg_end) / 2
+                
+                # Find best matching speaker segment
+                assigned_speaker = 'Unknown'
+                best_overlap = 0.0
+                
+                for speaker_seg in speaker_timeline:
+                    # Calculate overlap
+                    overlap_start = max(seg_start, speaker_seg['start'])
+                    overlap_end = min(seg_end, speaker_seg['end'])
+                    overlap = max(0, overlap_end - overlap_start)
+                    
+                    if overlap > best_overlap:
+                        best_overlap = overlap
+                        assigned_speaker = speaker_seg['speaker']
+                
+                # Create segment with speaker assignment
+                result_segment = whisperx_segment.copy()
+                result_segment['speaker'] = assigned_speaker
+                result_segments.append(result_segment)
+            
+            return {'segments': result_segments}
+            
+        except Exception as e:
+            logger.error(f"Manual speaker assignment failed: {e}")
+            # Ultimate fallback - return original without speaker info
+            return whisperx_result
     
     def _fallback_speaker_assignment(self, segments: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
