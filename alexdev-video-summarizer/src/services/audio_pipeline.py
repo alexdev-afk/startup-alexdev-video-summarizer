@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Dict, Any
 
 from services.whisper_service import WhisperService, WhisperError
+from services.librosa_service import LibROSAService, LibROSAError
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -30,6 +31,7 @@ class AudioPipelineController:
         
         # Initialize services
         self.whisper_service = WhisperService(config)
+        self.librosa_service = LibROSAService(config)
         
         logger.info("Audio pipeline controller initialized")
     
@@ -61,8 +63,14 @@ class AudioPipelineController:
                 logger.warning(f"No audio file available for scene {scene_id}")
                 results['whisper'] = self._fallback_whisper_result(scene)
             
-            # Step 2: LibROSA music analysis (mock for now - Phase 3)
-            results['librosa'] = self._mock_librosa_processing(scene, context)
+            # Step 2: LibROSA music analysis
+            if hasattr(context, 'audio_path') and context.audio_path:
+                results['librosa'] = self.librosa_service.analyze_audio_segment(
+                    context.audio_path, scene_info=scene
+                )
+            else:
+                logger.warning(f"No audio file available for LibROSA analysis in scene {scene_id}")
+                results['librosa'] = self._fallback_librosa_result(scene)
             
             # Step 3: pyAudioAnalysis feature extraction (mock for now - Phase 3)
             results['pyaudioanalysis'] = self._mock_pyaudioanalysis_processing(scene, context)
@@ -70,12 +78,21 @@ class AudioPipelineController:
             logger.info(f"Audio pipeline complete for scene {scene_id}")
             return results
             
-        except Exception as e:
+        except (WhisperError, LibROSAError) as e:
             logger.error(f"Audio pipeline failed for scene {scene_id}: {e}")
             # Return fallback results to prevent complete failure
             return {
                 'whisper': self._fallback_whisper_result(scene),
-                'librosa': self._fallback_librosa_result(scene),
+                'librosa': self.librosa_service._fallback_analysis_result(scene, error=str(e)),
+                'pyaudioanalysis': self._fallback_pyaudioanalysis_result(scene),
+                'error': str(e)
+            }
+        except Exception as e:
+            logger.error(f"Audio pipeline unexpected failure for scene {scene_id}: {e}")
+            # Return fallback results to prevent complete failure
+            return {
+                'whisper': self._fallback_whisper_result(scene),
+                'librosa': self.librosa_service._fallback_analysis_result(scene, error=str(e)),
                 'pyaudioanalysis': self._fallback_pyaudioanalysis_result(scene),
                 'error': str(e)
             }
@@ -95,12 +112,7 @@ class AudioPipelineController:
     
     def _fallback_librosa_result(self, scene: Dict[str, Any]) -> Dict[str, Any]:
         """Fallback LibROSA result when processing fails"""
-        return {
-            'features': {},
-            'processing_time': 0.0,
-            'error': 'LibROSA processing unavailable',
-            'fallback_mode': True
-        }
+        return self.librosa_service._fallback_analysis_result(scene, error='LibROSA processing unavailable')
     
     def _fallback_pyaudioanalysis_result(self, scene: Dict[str, Any]) -> Dict[str, Any]:
         """Fallback pyAudioAnalysis result when processing fails"""
@@ -109,32 +121,6 @@ class AudioPipelineController:
             'processing_time': 0.0,
             'error': 'pyAudioAnalysis processing unavailable',
             'fallback_mode': True
-        }
-    
-    def _mock_librosa_processing(self, scene: Dict[str, Any], context) -> Dict[str, Any]:
-        """Mock LibROSA music analysis processing"""
-        logger.debug(f"Mock LibROSA processing for scene {scene['scene_id']}")
-        
-        # Simulate processing time
-        time.sleep(0.6)
-        
-        return {
-            'features': {
-                'tempo': 120.0 + (scene['scene_id'] * 5),
-                'genre': 'speech' if scene['scene_id'] % 3 != 0 else 'background_music',
-                'mood': 'neutral',
-                'energy': 0.6 + (scene['scene_id'] * 0.05),
-                'spectral_centroid': 2500.0,
-                'zero_crossing_rate': 0.15,
-                'mfcc_mean': [12.5, -8.2, 4.1, -2.3, 1.8]
-            },
-            'audio_classification': {
-                'type': 'speech',
-                'quality_score': 8.5,
-                'noise_level': 'low'
-            },
-            'processing_time': 0.6,
-            'mock_mode': True
         }
     
     def _mock_pyaudioanalysis_processing(self, scene: Dict[str, Any], context) -> Dict[str, Any]:
