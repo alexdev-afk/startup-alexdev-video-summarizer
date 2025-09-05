@@ -8,6 +8,7 @@ Based on feature specification: ffmpeg-foundation.md
 import os
 import subprocess
 import shutil
+import time
 from pathlib import Path
 from typing import Dict, Any, Tuple, List, Optional
 import json
@@ -226,6 +227,12 @@ class FFmpegService:
         scenes_dir.mkdir(exist_ok=True)
         
         scene_files = []
+        scene_offsets = {
+            "video_file": str(video_path.name),
+            "total_scenes": len(scene_boundaries),
+            "created_at": time.time(),
+            "scenes": {}
+        }
         
         for boundary in scene_boundaries:
             scene_id = boundary['scene_id']
@@ -238,12 +245,33 @@ class FFmpegService:
             try:
                 self._extract_scene(video_path, scene_file, start_seconds, end_seconds)
                 scene_files.append(scene_file)
+                
+                # Store timing metadata for this scene
+                scene_offsets["scenes"][f"scene_{scene_id:03d}.mp4"] = {
+                    "scene_id": scene_id,
+                    "original_start_seconds": start_seconds,
+                    "original_end_seconds": end_seconds,
+                    "duration_seconds": (end_seconds - start_seconds) if end_seconds else None,
+                    "start_frame": boundary.get('start_frame'),
+                    "end_frame": boundary.get('end_frame'),
+                    "representative_timestamp": start_seconds + ((end_seconds - start_seconds) / 2) if end_seconds else start_seconds + 3.0
+                }
+                
                 logger.debug(f"Scene {scene_id} extracted: {scene_file.name}")
                 
             except Exception as e:
                 logger.error(f"Failed to extract scene {scene_id}: {str(e)}")
                 # Continue with other scenes rather than failing completely
                 continue
+        
+        # Save scene offsets JSON file
+        offsets_file = scenes_dir / "scene_offsets.json"
+        try:
+            with open(offsets_file, 'w') as f:
+                json.dump(scene_offsets, f, indent=2)
+            logger.info(f"Scene offsets saved to: {offsets_file}")
+        except Exception as e:
+            logger.warning(f"Failed to save scene offsets: {str(e)}")
         
         logger.info(f"Scene splitting complete: {len(scene_files)}/{len(scene_boundaries)} scenes")
         return scene_files
