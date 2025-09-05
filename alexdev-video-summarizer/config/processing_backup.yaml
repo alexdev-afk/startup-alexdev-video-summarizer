@@ -80,23 +80,13 @@ gpu_pipeline:
     
     # VAD Settings (Voice Activity Detection)
     vad_threshold: 0.4          # Silero VAD sensitivity (0.1-0.9)
-    chunk_threshold: 3.0        # Split chunks on gaps > 3 seconds (legacy setting)
+    chunk_threshold: 3.0        # Split chunks on gaps > 3 seconds
     
     # Word timestamps (original Whisper supports this)
-    enable_word_timestamps: true # Enable word-level timestamps
-    enable_word_alignment: true  # Enable WhisperX word alignment when available
-    
-    # Advanced Chunking for Advertisement Content
-    chunking_strategy: "multi_strategy"  # Options: 'gap_based', 'duration_based', 'multi_strategy'
-    max_chunk_duration: 20.0    # Maximum chunk duration (seconds) - prevents very long chunks
-    min_chunk_duration: 5.0     # Minimum chunk duration (seconds) - merges very short chunks
-    energy_based_splitting: true # Enable energy-based splitting at natural breaks
-    
-    # Sequential model loading for GPU memory management
-    sequential_model_loading: true  # Load/unload diarization model separately to manage GPU memory
+    enable_word_timestamps: true # Enable word-level timestamps\n    enable_word_alignment: true  # Enable WhisperX word alignment when available\n    \n    # Advanced Chunking for Advertisement Content\n    chunking_strategy: \"multi_strategy\"  # Options: 'gap_based', 'duration_based', 'multi_strategy'\n    max_chunk_duration: 20.0    # Maximum chunk duration (seconds) - prevents very long chunks\n    min_chunk_duration: 5.0     # Minimum chunk duration (seconds) - merges very short chunks\n    energy_based_splitting: true # Enable energy-based splitting at natural breaks
     
     # Speaker Diarization (requires Hugging Face token)
-    huggingface_token: ""  # HF token for speaker diarization - set via environment variable HF_TOKEN
+    huggingface_token: "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"  # HF token for speaker diarization
                                # Get free token: https://huggingface.co/settings/tokens
                                # Required models: pyannote/segmentation-3.0, pyannote/speaker-diarization-3.1
     enable_diarization: true    # Enable speaker diarization when token available

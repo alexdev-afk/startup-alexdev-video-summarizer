@@ -1,8 +1,13 @@
 """
-WhisperX + Silero VAD Transcription Service
+Hybrid Audio Transcription Service
 
-Handles GPU-based audio transcription using WhisperX with Silero VAD.
-Optimized for FFmpeg-prepared audio.wav files with enhanced speaker identification.
+Current architecture: Silero VAD + Original Whisper + PyAnnote Diarization
+- Silero VAD for voice activity detection and speech segmentation
+- Original Whisper (GPU) for transcription with advertisement-optimized chunking
+- PyAnnote for speaker diarization with sequential loading for memory management
+- WhisperX integration prepared for future hardware compatibility improvements
+
+Optimized for advertisement content institutional knowledge extraction.
 """
 
 import time
@@ -63,11 +68,18 @@ class WhisperError(Exception):
 
 
 class WhisperService:
-    """WhisperX + Silero VAD transcription service for audio processing"""
+    """
+    Hybrid audio transcription service for advertisement content analysis
+    
+    Architecture: Silero VAD → Original Whisper (GPU) → PyAnnote Diarization
+    - Advertisement-optimized chunking (20s max, 5s min)
+    - Sequential model loading for GPU memory management
+    - WhisperX prepared for future compatibility improvements
+    """
     
     def __init__(self, config: Dict[str, Any]):
         """
-        Initialize WhisperX + Silero VAD service
+        Initialize hybrid audio transcription service
         
         Args:
             config: Configuration dictionary with Whisper settings
@@ -101,7 +113,7 @@ class WhisperService:
         self.sequential_model_loading = self.whisper_config.get('sequential_model_loading', False)
         
         # Diarization configuration
-        self.huggingface_token = self.whisper_config.get('huggingface_token')
+        self.huggingface_token = self.whisper_config.get('huggingface_token') or os.getenv('HF_TOKEN')
         self.enable_diarization = self.whisper_config.get('enable_diarization', True)
         self.max_speakers = self.whisper_config.get('max_speakers', 10)
         self.min_speakers = self.whisper_config.get('min_speakers', 1)
@@ -117,7 +129,7 @@ class WhisperService:
         # Setup FFmpeg path for Whisper compatibility
         self._setup_ffmpeg_path()
         
-        logger.info(f"WhisperX + Silero VAD service initialized - model: {self.model_size}, device: {self.device}, vad_threshold: {self.vad_threshold}")
+        logger.info(f"Hybrid audio transcription service initialized - model: {self.model_size}, device: {self.device}, vad_threshold: {self.vad_threshold}")
     
     def _determine_device(self) -> str:
         """Determine the best device for Whisper processing"""
@@ -187,27 +199,88 @@ class WhisperService:
         raise WhisperError("FFmpeg not found. Install FFmpeg and ensure it's in PATH for WhisperX compatibility.")
     
     def _load_model(self):
-        """Load WhisperX and Silero VAD models (lazy loading)"""
+        """Initialize service for sequential loading (models loaded on demand)"""
         if self.model_loaded:
             return
         
         # Skip model loading in development mode or if dependencies missing
         if self.development_config.get('skip_model_loading', False) or not TORCH_AVAILABLE:
-            logger.info("WhisperX + Silero VAD model loading skipped (development mode or missing dependencies)")
+            logger.info("Sequential model loading initialized (development mode - models loaded on demand)")
             self.model_loaded = True
             return
         
         try:
-            # Choose between original Whisper and WhisperX
+            # Validate dependencies without loading models
             if self.use_original_whisper:
-                # Load original Whisper (GPU compatible)
+                import whisper
+                logger.info("Original Whisper available for sequential loading")
+            elif WHISPERX_AVAILABLE:
+                logger.info("WhisperX available for sequential loading")
+            else:
+                import whisper
+                logger.warning("WhisperX not available, will use original Whisper")
+            
+            # Validate VAD availability
+            if not SILERO_AVAILABLE:
+                logger.info("Silero VAD will be loaded on demand")
+            
+            self.model_loaded = True
+            logger.info("Sequential loading framework initialized - models loaded on demand")
+            
+        except ImportError as e:
+            raise WhisperError(
+                f"Required dependencies not installed: {str(e)}. "
+                "Install with: pip install whisperx torch"
+            )
+        except Exception as e:
+            raise WhisperError(f"Failed to initialize sequential loading: {str(e)}") from e
+    
+    def _load_vad_model(self):
+        """Load Silero VAD model for voice activity detection"""
+        if self.silero_model:
+            return
+            
+        logger.info("Loading Silero VAD model...")
+        try:
+            self.silero_model, self.silero_utils = load_silero_vad()
+            if self.silero_model:
+                logger.info("Silero VAD model loaded successfully")
+            else:
+                logger.warning("Silero VAD not available, using basic VAD")
+        except Exception as e:
+            logger.warning(f"Failed to load Silero VAD: {e}")
+            self.silero_model = None
+            self.silero_utils = None
+    
+    def _unload_vad_model(self):
+        """Unload Silero VAD model to free memory"""
+        if self.silero_model:
+            logger.info("Unloading Silero VAD model...")
+            del self.silero_model
+            del self.silero_utils
+            self.silero_model = None
+            self.silero_utils = None
+            
+            # Clean up GPU memory
+            if self.device == 'cuda' and TORCH_AVAILABLE:
+                import torch
+                torch.cuda.empty_cache()
+                gc.collect()
+                logger.debug("GPU memory cleared after VAD model unload")
+    
+    def _load_whisper_model(self):
+        """Load Whisper model for transcription"""
+        if self.original_whisper_model or self.whisperx_model:
+            return
+            
+        try:
+            if self.use_original_whisper:
                 logger.info(f"Loading original Whisper model: {self.model_size}")
                 import whisper
                 self.original_whisper_model = whisper.load_model(self.model_size, device=self.device)
                 logger.info("Original Whisper model loaded successfully on GPU")
             
             elif WHISPERX_AVAILABLE:
-                # Load WhisperX model (fallback mode)
                 logger.info(f"Loading WhisperX model: {self.model_size}")
                 
                 # Set compute type based on device
@@ -221,56 +294,37 @@ class WhisperService:
                     device=self.device,
                     compute_type=compute_type
                 )
-                
-                # Sequential loading: Only load diarization if not using sequential mode
-                if not self.sequential_model_loading:
-                    # Load diarization model immediately (original behavior)
-                    if self.enable_diarization and self.huggingface_token:
-                        try:
-                            self.diarize_model = whisperx.diarize.DiarizationPipeline(
-                                use_auth_token=self.huggingface_token,
-                                device=self.device
-                            )
-                            logger.info("WhisperX model and diarization pipeline loaded successfully")
-                            logger.info(f"Diarization enabled: speakers {self.min_speakers}-{self.max_speakers}")
-                        except Exception as e:
-                            logger.warning(f"Diarization pipeline failed to load: {e}")
-                            logger.info("WhisperX model loaded successfully (without diarization)")
-                            self.diarize_model = None
-                    elif not self.huggingface_token and self.enable_diarization:
-                        logger.warning("Diarization enabled but no Hugging Face token provided")
-                        logger.info("Set 'huggingface_token' in config for speaker diarization")
-                        self.diarize_model = None
-                    else:
-                        logger.info("WhisperX model loaded (diarization disabled in config)")
-                        self.diarize_model = None
-                else:
-                    # Sequential loading: Defer diarization model loading
-                    logger.info("WhisperX model loaded successfully (sequential mode - diarization deferred)")
-                    self.diarize_model = None
+                logger.info("WhisperX model loaded successfully")
+            
             else:
-                # Fallback to original Whisper
+                # Fallback: Load original Whisper
+                logger.info(f"Loading original Whisper model (fallback): {self.model_size}")
                 import whisper
-                logger.warning("WhisperX not available, falling back to OpenAI Whisper")
-                self.whisperx_model = whisper.load_model(self.model_size, device=self.device)
-                logger.info("OpenAI Whisper model loaded successfully")
-            
-            # Load Silero VAD model
-            self.silero_model, self.silero_utils = load_silero_vad()
-            if self.silero_model:
-                logger.info("Silero VAD model loaded successfully")
-            else:
-                logger.warning("Silero VAD not available, using basic VAD")
-            
-            self.model_loaded = True
-            
-        except ImportError as e:
-            raise WhisperError(
-                f"Required dependencies not installed: {str(e)}. "
-                "Install with: pip install whisperx torch"
-            )
+                self.original_whisper_model = whisper.load_model(self.model_size, device=self.device)
+                logger.info("Original Whisper model loaded successfully as fallback")
+                
         except Exception as e:
-            raise WhisperError(f"Failed to load models: {str(e)}") from e
+            logger.error(f"Failed to load Whisper model: {e}")
+            raise WhisperError(f"Whisper model loading failed: {str(e)}") from e
+    
+    def _unload_whisper_model(self):
+        """Unload Whisper model to free VRAM"""
+        if self.original_whisper_model:
+            logger.info("Unloading original Whisper model...")
+            del self.original_whisper_model
+            self.original_whisper_model = None
+        
+        if self.whisperx_model:
+            logger.info("Unloading WhisperX model...")
+            del self.whisperx_model
+            self.whisperx_model = None
+        
+        # Clean up GPU memory
+        if self.device == 'cuda' and TORCH_AVAILABLE:
+            import torch
+            torch.cuda.empty_cache()
+            gc.collect()
+            logger.debug("GPU memory cleared after Whisper model unload")
     
     def _load_diarization_model(self):
         """Load diarization model for sequential processing"""
@@ -279,10 +333,15 @@ class WhisperService:
             
         try:
             logger.info("Loading diarization model for sequential processing...")
-            self.diarize_model = whisperx.diarize.DiarizationPipeline(
-                use_auth_token=self.huggingface_token,
-                device=self.device
+            # Use pyannote.audio directly instead of WhisperX wrapper
+            from pyannote.audio import Pipeline
+            self.diarize_model = Pipeline.from_pretrained(
+                "pyannote/speaker-diarization-3.1",
+                use_auth_token=self.huggingface_token
             )
+            if self.device == 'cuda':
+                import torch
+                self.diarize_model = self.diarize_model.to(torch.device(self.device))
             logger.info(f"Diarization model loaded: speakers {self.min_speakers}-{self.max_speakers}")
         except Exception as e:
             logger.warning(f"Failed to load diarization model: {e}")
@@ -304,7 +363,7 @@ class WhisperService:
     
     def transcribe_audio(self, audio_path: Path, scene_info: Optional[Dict] = None) -> Dict[str, Any]:
         """
-        Transcribe audio file using WhisperX + Silero VAD
+        Transcribe audio file using sequential model loading (VAD → Whisper → Diarization)
         
         Args:
             audio_path: Path to audio.wav file (from FFmpeg)
@@ -316,7 +375,8 @@ class WhisperService:
         Raises:
             WhisperError: If transcription fails
         """
-        logger.info(f"Transcribing audio with VAD: {audio_path.name}")
+        audio_path = Path(audio_path) if isinstance(audio_path, str) else audio_path
+        logger.info(f"Starting sequential transcription: {audio_path.name}")
         
         # Handle development mock mode
         if self.development_config.get('mock_ai_services', False):
@@ -330,43 +390,39 @@ class WhisperService:
             raise WhisperError(f"Audio file too small: {audio_path}")
         
         try:
-            # Load models if needed
+            # Initialize sequential loading framework
             self._load_model()
             
             start_time = time.time()
             
-            # STAGE 1: VAD-based audio segmentation
+            # PASS 1: VAD (Voice Activity Detection)
+            logger.info("=== PASS 1: VAD Processing ===")
+            self._load_vad_model()
             vad_segments = self._perform_vad_segmentation(audio_path)
             logger.info(f"VAD detected {len(vad_segments)} speech segments")
+            self._unload_vad_model()
             
-            # STAGE 2: Process each VAD segment with WhisperX
-            all_transcription_segments = []
-            for i, vad_chunk in enumerate(vad_segments):
-                logger.debug(f"Processing VAD chunk {i+1}/{len(vad_segments)}")
-                chunk_result = self._transcribe_vad_chunk(audio_path, vad_chunk, i)
-                if chunk_result:
-                    all_transcription_segments.extend(chunk_result)
+            # PASS 2: Whisper Transcription  
+            logger.info("=== PASS 2: Whisper Transcription ===")
+            self._load_whisper_model()
+            all_transcription_segments = self._transcribe_vad_segments(audio_path, vad_segments)
+            reconstructed_segments = self._reconstruct_timestamps(all_transcription_segments)
+            self._unload_whisper_model()
             
-            # STAGE 3: Reconstruct whole-file timestamps and merge segments
-            reconstructed_segments = self._reconstruct_whole_file_timestamps(
-                all_transcription_segments, vad_segments
-            )
-            
-            # STAGE 4: Apply speaker diarization if available
-            if self.enable_diarization and WHISPERX_AVAILABLE:
-                # Load diarization model if using sequential loading
-                if self.sequential_model_loading and not self.diarize_model:
-                    self._load_diarization_model()
-                
+            # PASS 3: Speaker Diarization
+            logger.info("=== PASS 3: Speaker Diarization ===")
+            if self.enable_diarization:
+                self._load_diarization_model()
                 if self.diarize_model:
                     reconstructed_segments = self._apply_speaker_diarization(
                         audio_path, reconstructed_segments
                     )
-                    
-                    # Unload diarization model if using sequential loading
-                    if self.sequential_model_loading:
-                        self._unload_diarization_model()
+                    self._unload_diarization_model()
+                else:
+                    logger.warning("Diarization model not loaded, using fallback speaker assignment")
+                    reconstructed_segments = self._fallback_speaker_assignment(reconstructed_segments)
             
+            # Calculate processing time
             processing_time = time.time() - start_time
             
             # Build final result
@@ -374,10 +430,10 @@ class WhisperService:
                 reconstructed_segments, processing_time, scene_info, vad_segments
             )
             
-            # GPU memory cleanup
+            # Final GPU memory cleanup
             self._cleanup_gpu_memory()
             
-            logger.info(f"VAD + WhisperX transcription complete: {processing_time:.2f}s, "
+            logger.info(f"Sequential transcription complete: {processing_time:.2f}s, "
                        f"{len(vad_segments)} VAD chunks -> {len(reconstructed_segments)} final segments")
             
             # Save analysis to intermediate file
@@ -386,9 +442,12 @@ class WhisperService:
             return processed_result
             
         except Exception as e:
-            # Cleanup on error
+            # Cleanup all models on error
+            self._unload_vad_model()
+            self._unload_whisper_model()
+            self._unload_diarization_model()
             self._cleanup_gpu_memory()
-            raise WhisperError(f"VAD + WhisperX transcription failed: {str(e)}") from e
+            raise WhisperError(f"Sequential transcription failed: {str(e)}") from e
     
     def _perform_vad_segmentation(self, audio_path: Path) -> List[Dict[str, Any]]:
         """
@@ -521,6 +580,70 @@ class WhisperService:
                 'single_segment': True
             }]
     
+    def _transcribe_vad_segments(self, audio_path: Path, vad_segments: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Transcribe all VAD segments using loaded Whisper model
+        
+        Args:
+            audio_path: Path to the audio file
+            vad_segments: List of VAD segments to transcribe
+            
+        Returns:
+            List of transcription segments
+        """
+        all_transcription_segments = []
+        
+        for i, vad_chunk in enumerate(vad_segments):
+            logger.debug(f"Processing VAD chunk {i+1}/{len(vad_segments)}")
+            chunk_result = self._transcribe_vad_chunk(audio_path, vad_chunk, i)
+            if chunk_result:
+                all_transcription_segments.extend(chunk_result)
+        
+        return all_transcription_segments
+    
+    def _reconstruct_timestamps(self, all_transcription_segments: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Reconstruct whole-file timestamps from VAD chunk segments
+        
+        Args:
+            all_transcription_segments: Segments from individual VAD chunks
+            
+        Returns:
+            Segments with reconstructed whole-file timestamps
+        """
+        # The segments already have the correct timestamps from VAD chunks
+        # Just ensure they're properly formatted
+        reconstructed_segments = []
+        
+        for segment in all_transcription_segments:
+            # Reconstruct whole-file timestamp from VAD chunk info
+            vad_chunk_info = segment.get('vad_chunk_info', {})
+            chunk_start = segment.get('chunk_start', 0)
+            chunk_end = segment.get('chunk_end', 0)
+            
+            # Calculate whole-file timestamp
+            whole_file_start = vad_chunk_info.get('start', 0) + chunk_start
+            whole_file_end = vad_chunk_info.get('start', 0) + chunk_end
+            
+            reconstructed_segment = {
+                'start': whole_file_start,
+                'end': whole_file_end,
+                'duration': whole_file_end - whole_file_start,
+                'text': segment.get('text', ''),
+                'confidence': segment.get('confidence', 0.0),
+                'words': segment.get('words', []),
+                'speaker': segment.get('speaker', 'Unknown'),
+                'vad_chunk_id': segment.get('chunk_id', 0),
+                'original_chunk_timing': {
+                    'chunk_start': chunk_start,
+                    'chunk_end': chunk_end
+                }
+            }
+            
+            reconstructed_segments.append(reconstructed_segment)
+        
+        return reconstructed_segments
+    
     def _transcribe_vad_chunk(self, audio_path: Path, vad_chunk: Dict[str, Any], chunk_idx: int) -> List[Dict[str, Any]]:
         """
         Transcribe a single VAD chunk using WhisperX
@@ -540,9 +663,9 @@ class WhisperService:
                 # Fallback - extract chunk from original file
                 self._extract_audio_chunk(audio_path, temp_chunk_path, vad_chunk)
             
-            # Choose transcription method based on hybrid mode
-            if self.use_original_whisper and self.original_whisper_model:
-                # Original Whisper transcription (hybrid mode)
+            # Choose transcription method based on hybrid mode and available models
+            if self.original_whisper_model:
+                # Original Whisper transcription (current working mode)
                 logger.debug("Using original Whisper for transcription")
                 transcription_options = {
                     'task': 'transcribe',
@@ -558,40 +681,47 @@ class WhisperService:
                     
                 result = self.original_whisper_model.transcribe(str(temp_chunk_path), **transcription_options)
                 
-            elif WHISPERX_AVAILABLE and hasattr(self.whisperx_model, 'transcribe'):
-                # WhisperX transcription
-                result = self.whisperx_model.transcribe(str(temp_chunk_path))
-                
-                # WhisperX alignment for better word timestamps (optional)
-                if self.enable_word_alignment and hasattr(whisperx, 'load_align_model'):
-                    try:
-                        logger.debug("Loading alignment model for word-level timestamps")
-                        align_model, metadata = whisperx.load_align_model(
-                            language_code=result.get("language", "en"), 
-                            device=self.device
-                        )
-                        result = whisperx.align(result["segments"], align_model, metadata, str(temp_chunk_path), self.device)
-                        logger.debug("Word alignment completed successfully")
-                    except Exception as e:
-                        logger.warning(f"Word alignment failed, using segment-level timestamps: {e}")
-                else:
-                    logger.debug("Word alignment disabled - using segment-level timestamps only")
+            # FUTURE: WhisperX transcription path - currently disabled due to hardware compatibility
+            # Will be re-enabled when GPU memory management and model compatibility improves
+            # elif WHISPERX_AVAILABLE and hasattr(self.whisperx_model, 'transcribe'):
+            #     # WhisperX transcription with better word alignment
+            #     result = self.whisperx_model.transcribe(str(temp_chunk_path))
+            #     
+            #     # WhisperX alignment for better word timestamps
+            #     if self.enable_word_alignment and hasattr(whisperx, 'load_align_model'):
+            #         try:
+            #             logger.debug("Loading alignment model for word-level timestamps")
+            #             align_model, metadata = whisperx.load_align_model(
+            #                 language_code=result.get("language", "en"), 
+            #                 device=self.device
+            #             )
+            #             result = whisperx.align(result["segments"], align_model, metadata, str(temp_chunk_path), self.device)
+            #             logger.debug("Word alignment completed successfully")
+            #         except Exception as e:
+            #             logger.warning(f"Word alignment failed, using segment-level timestamps: {e}")
+            #     else:
+            #         logger.debug("Word alignment disabled - using segment-level timestamps only")
+            
                     
             else:
-                # Fallback to original Whisper
+                # Fallback: Load original Whisper on CPU if GPU models not available
+                logger.warning("GPU models not available, falling back to CPU processing")
+                import whisper
+                cpu_model = whisper.load_model(self.model_size, device='cpu')
+                
                 transcription_options = {
                     'task': 'transcribe',
-                    'word_timestamps': True,
+                    'word_timestamps': self.enable_word_timestamps,
                     'condition_on_previous_text': False,
                     'temperature': 0,
                     'no_speech_threshold': 0.6,
-                    'logprob_threshold': -1.0
                 }
                 
                 if self.language != 'auto':
                     transcription_options['language'] = self.language
                 
-                result = self.whisperx_model.transcribe(str(temp_chunk_path), **transcription_options)
+                result = cpu_model.transcribe(str(temp_chunk_path), **transcription_options)
+                del cpu_model  # Clean up CPU model immediately
             
             # Clean up temporary file
             try:
@@ -742,65 +872,77 @@ class WhisperService:
             return self._fallback_speaker_assignment(segments)
         
         try:
-            logger.info("Applying WhisperX speaker diarization...")
+            logger.info("Applying pyannote speaker diarization...")
             
-            # Load audio using WhisperX
-            audio = whisperx.load_audio(str(audio_path))
+            # Load audio directly for pyannote
+            import soundfile as sf
+            audio, sr = sf.read(str(audio_path))
             
-            # Run diarization on the audio with speaker constraints
-            diarize_segments = self.diarize_model(
-                audio,
-                min_speakers=self.min_speakers,
-                max_speakers=self.max_speakers
-            )
+            # Ensure stereo format for pyannote (channel, time)
+            if audio.ndim == 1:
+                # Mono to stereo: duplicate channel
+                audio = np.stack([audio, audio], axis=0)
+            elif audio.ndim == 2 and audio.shape[0] > audio.shape[1]:
+                # Time x Channel to Channel x Time
+                audio = audio.T
             
-            # Convert our segments to WhisperX format for speaker assignment
-            whisperx_result = {
-                'segments': [
-                    {
-                        'start': seg['start'],
-                        'end': seg['end'], 
-                        'text': seg['text'],
-                        'words': seg.get('words', [])
-                    } for seg in segments
-                ]
-            }
+            # Run diarization on the audio  
+            diarize_segments = self.diarize_model({
+                "waveform": torch.from_numpy(audio).float(), 
+                "sample_rate": sr
+            })
             
-            # Apply speaker assignment using WhisperX
-            try:
-                result_with_speakers = whisperx.assign_word_speakers(diarize_segments, whisperx_result)
-                logger.debug("Speaker assignment completed successfully")
-            except Exception as e:
-                logger.warning(f"Speaker assignment failed, using diarization segments only: {e}")
-                # Fallback: manually assign speakers based on diarization segments
-                result_with_speakers = self._manual_speaker_assignment(diarize_segments, whisperx_result)
+            # Extract speaker timeline from pyannote results
+            speaker_timeline = []
+            for turn, _, speaker in diarize_segments.itertracks(yield_label=True):
+                speaker_timeline.append({
+                    'start': turn.start,
+                    'end': turn.end,
+                    'speaker': speaker
+                })
+            
+            # Manually assign speakers to segments based on temporal overlap
+            result_with_speakers = {'segments': []}
+            for segment in segments:
+                seg_start = segment['start']
+                seg_end = segment['end']
+                seg_midpoint = (seg_start + seg_end) / 2
+                
+                # Find best matching speaker segment
+                assigned_speaker = 'Unknown'
+                best_overlap = 0.0
+                
+                for speaker_seg in speaker_timeline:
+                    # Calculate overlap
+                    overlap_start = max(seg_start, speaker_seg['start'])
+                    overlap_end = min(seg_end, speaker_seg['end'])
+                    overlap = max(0, overlap_end - overlap_start)
+                    
+                    if overlap > best_overlap:
+                        best_overlap = overlap
+                        assigned_speaker = speaker_seg['speaker']
+                
+                # Create segment with speaker assignment
+                result_segment = {
+                    'start': segment['start'],
+                    'end': segment['end'],
+                    'text': segment['text'],
+                    'words': segment.get('words', []),
+                    'speaker': assigned_speaker
+                }
+                result_with_speakers['segments'].append(result_segment)
             
             # Update our segments with speaker information
-            for i, whisperx_segment in enumerate(result_with_speakers['segments']):
+            for i, result_segment in enumerate(result_with_speakers['segments']):
                 if i < len(segments):
-                    # Extract speaker from WhisperX result
-                    speaker = whisperx_segment.get('speaker', 'Unknown')
-                    if speaker == 'Unknown' or speaker is None:
-                        # Try to get speaker from words if segment speaker is unknown
-                        words = whisperx_segment.get('words', [])
-                        if words:
-                            word_speakers = [w.get('speaker') for w in words if w.get('speaker')]
-                            if word_speakers:
-                                # Use most common speaker in the segment
-                                from collections import Counter
-                                speaker = Counter(word_speakers).most_common(1)[0][0]
-                    
+                    speaker = result_segment.get('speaker', 'Unknown')
                     segments[i]['speaker'] = speaker if speaker != 'Unknown' else f'Speaker_{i % 2 + 1}'
-                    
-                    # Update word-level speaker information if available
-                    if 'words' in whisperx_segment:
-                        segments[i]['words'] = whisperx_segment['words']
             
             unique_speakers = set(seg['speaker'] for seg in segments if seg['speaker'] != 'Unknown')
-            logger.info(f"WhisperX speaker diarization complete: {len(unique_speakers)} speakers detected")
+            logger.info(f"Pyannote speaker diarization complete: {len(unique_speakers)} speakers detected")
             
         except Exception as e:
-            logger.error(f"WhisperX speaker diarization failed: {e}")
+            logger.error(f"Pyannote speaker diarization failed: {e}")
             logger.info("Falling back to basic speaker assignment")
             segments = self._fallback_speaker_assignment(segments)
         
