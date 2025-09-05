@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Dict, Any
 
 from services.yolo_service import YOLOService, YOLOError
+from services.easyocr_service import EasyOCRService, EasyOCRError
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -29,6 +30,7 @@ class VideoGPUPipelineController:
         
         # Initialize services
         self.yolo_service = YOLOService(config)
+        self.easyocr_service = EasyOCRService(config)
         
         logger.info("Video GPU pipeline controller initialized")
     
@@ -60,14 +62,28 @@ class VideoGPUPipelineController:
                 logger.warning(f"No video file available for scene {scene_id}")
                 results['yolo'] = self._fallback_yolo_result(scene)
             
-            # Step 2: EasyOCR text extraction (mock for now - Phase 4)
-            results['easyocr'] = self._mock_easyocr_processing(scene, context)
+            # Step 2: EasyOCR text extraction (using FFmpeg-extracted video)
+            if hasattr(context, 'video_path') and context.video_path:
+                results['easyocr'] = self.easyocr_service.extract_text_from_scene(
+                    context.video_path, scene_info=scene
+                )
+            else:
+                logger.warning(f"No video file available for EasyOCR in scene {scene_id}")
+                results['easyocr'] = self._fallback_easyocr_result(scene)
             
             logger.info(f"Video GPU pipeline complete for scene {scene_id}")
             return results
             
-        except Exception as e:
+        except (YOLOError, EasyOCRError) as e:
             logger.error(f"Video GPU pipeline failed for scene {scene_id}: {e}")
+            # Return fallback results to prevent complete failure
+            return {
+                'yolo': self._fallback_yolo_result(scene),
+                'easyocr': self._fallback_easyocr_result(scene),
+                'error': str(e)
+            }
+        except Exception as e:
+            logger.error(f"Video GPU pipeline unexpected failure for scene {scene_id}: {e}")
             # Return fallback results to prevent complete failure
             return {
                 'yolo': self._fallback_yolo_result(scene),
@@ -90,13 +106,7 @@ class VideoGPUPipelineController:
     
     def _fallback_easyocr_result(self, scene: Dict[str, Any]) -> Dict[str, Any]:
         """Fallback EasyOCR result when processing fails"""
-        return {
-            'text': [],
-            'text_details': [],
-            'processing_time': 0.0,
-            'error': 'EasyOCR processing unavailable',
-            'fallback_mode': True
-        }
+        return self.easyocr_service._fallback_text_result(scene, 'EasyOCR processing unavailable')
     
     def _mock_easyocr_processing(self, scene: Dict[str, Any], context) -> Dict[str, Any]:
         """Mock EasyOCR text extraction processing"""
