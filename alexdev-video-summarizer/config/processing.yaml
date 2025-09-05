@@ -138,15 +138,14 @@ cpu_pipeline:
     segment_length: 10.0             # Fixed segment duration (seconds)
     segment_overlap: 2.0             # Overlap between segments (seconds)
     
-  # pyAudioAnalysis Settings
+  # pyAudioAnalysis Settings - UPDATED: Fake interpretive analysis removed
   pyaudioanalysis:
     window_size: 0.050          # 50ms windows
     step_size: 0.025            # 25ms step size
-    features: "all"             # Extract all 68 features
-    output_mode: "interpretive" # Output format: "numerical", "interpretive", "both"
-    # - "numerical": Raw 68 features + statistics (legacy mode)
-    # - "interpretive": LLM-ready characterizations (recommended)  
-    # - "both": Complete output with both formats
+    features: "all"             # Extract all 68 features (numerical only)
+    output_mode: "numerical"    # CHANGED: Only numerical - fake interpretive removed
+    # REMOVED interpretive mode - was fake heuristic analysis with arbitrary thresholds
+    # Timeline services now handle real event-based analysis
 
 # Error Handling & Circuit Breaker
 error_handling:

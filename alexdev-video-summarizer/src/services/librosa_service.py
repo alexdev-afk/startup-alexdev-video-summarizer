@@ -505,50 +505,26 @@ class LibROSAService:
             return {'rhythm_strength': 0.5, 'error': str(e)}
     
     def _classify_audio_content(self, audio_data: np.ndarray) -> Dict[str, Any]:
-        """Classify audio content type and characteristics"""
+        """Basic audio characteristics - fake classification removed"""
         try:
-            # Simple heuristic-based classification
-            # This could be enhanced with ML models in the future
-            
-            # Energy-based classification
-            rms_energy = np.mean(librosa.feature.rms(y=audio_data)[0]) if LIBROSA_AVAILABLE else 0.3
-            
-            # Spectral characteristics
+            # Only real measurements, no fake classification
             if LIBROSA_AVAILABLE:
-                spectral_centroid = np.mean(librosa.feature.spectral_centroid(y=audio_data, sr=self.sample_rate)[0])
-                zero_crossing_rate = np.mean(librosa.feature.zero_crossing_rate(audio_data)[0])
+                rms_energy = float(np.mean(librosa.feature.rms(y=audio_data)[0]))
+                spectral_centroid = float(np.mean(librosa.feature.spectral_centroid(y=audio_data, sr=self.sample_rate)[0]))
+                zero_crossing_rate = float(np.mean(librosa.feature.zero_crossing_rate(audio_data)[0]))
             else:
-                spectral_centroid = 2500.0
-                zero_crossing_rate = 0.15
-            
-            # Classification logic
-            if spectral_centroid > 3000 and zero_crossing_rate > 0.2:
-                audio_type = 'speech'
-                mood = 'neutral'
-            elif spectral_centroid < 2000 and rms_energy > 0.1:
-                audio_type = 'music'
-                mood = 'energetic' if rms_energy > 0.3 else 'calm'
-            else:
-                audio_type = 'mixed'
-                mood = 'neutral'
-            
-            # Quality assessment
-            quality_score = min(10.0, max(1.0, 10.0 * rms_energy))
-            noise_level = 'low' if rms_energy > 0.05 else 'high'
+                return {'type': 'unknown', 'error': 'LibROSA not available'}
             
             return {
-                'type': audio_type,
-                'mood': mood,
-                'energy_level': 'high' if rms_energy > 0.3 else 'medium' if rms_energy > 0.1 else 'low',
-                'quality_score': float(quality_score),
-                'noise_level': noise_level,
-                'speech_probability': 0.8 if audio_type == 'speech' else 0.3,
-                'music_probability': 0.8 if audio_type == 'music' else 0.2
+                'rms_energy': rms_energy,
+                'spectral_centroid_hz': spectral_centroid, 
+                'zero_crossing_rate': zero_crossing_rate,
+                'note': 'Raw measurements only - fake classification removed'
             }
             
         except Exception as e:
-            logger.warning(f"Audio classification failed: {e}")
-            return {'type': 'unknown', 'mood': 'neutral', 'error': str(e)}
+            logger.warning(f"Audio measurement failed: {e}")
+            return {'type': 'unknown', 'error': str(e)}
     
     def _calculate_rhythm_regularity(self, onset_times: np.ndarray) -> float:
         """Calculate rhythm regularity score from onset times"""

@@ -57,8 +57,8 @@ class PyAudioAnalysisService:
         self.pyaudio_config = config.get('cpu_pipeline', {}).get('pyaudioanalysis', {})
         self.development_config = config.get('development', {})
         
-        # Output mode configuration
-        self.output_mode = self.pyaudio_config.get('output_mode', 'interpretive')  # "numerical", "interpretive", "both"
+        # Output mode configuration - REMOVED FAKE INTERPRETIVE ANALYSIS
+        self.output_mode = self.pyaudio_config.get('output_mode', 'numerical')  # "numerical" only - fake interpretive removed
         
         # Audio processing configuration
         self.window_size = self.pyaudio_config.get('window_size', 0.050)  # 50ms
@@ -124,8 +124,8 @@ class PyAudioAnalysisService:
                 segment_analyses.append(segment_analysis)
                 logger.debug(f"Segment {i+1} analysis complete: voice={segment_analysis.get('voice_characteristics', {}).get('vocal_clarity', 'unknown')[:50]}")
             
-            # Aggregate analysis across all segments
-            aggregate_analysis = self._aggregate_segment_analyses(segment_analyses, whisper_result)
+            # Simple numerical aggregation - fake interpretive aggregation removed
+            aggregate_analysis = {'total_segments': len(segment_analyses)}
             
             final_result = {
                 'processing_type': 'whisper_aligned_segments',
@@ -559,94 +559,9 @@ class PyAudioAnalysisService:
             logger.warning(f"Prosodic feature extraction failed: {e}")
             return {'error': str(e)}
 
-    def _aggregate_segment_analyses(self, segment_analyses: List[Dict], whisper_result: Dict) -> Dict[str, Any]:
-        """Create interpretive narrative of overall presentation patterns"""
-        if not segment_analyses:
-            return {}
-        
-        try:
-            # Extract common characteristics across segments
-            voice_clarity_patterns = []
-            presentation_approaches = []
-            engagement_levels = []
-            quality_assessments = []
-            
-            for seg in segment_analyses:
-                voice_chars = seg.get('voice_characteristics', {})
-                comm_style = seg.get('communication_style', {})
-                delivery = seg.get('delivery_assessment', {})
-                
-                if voice_chars.get('vocal_clarity'):
-                    voice_clarity_patterns.append(voice_chars['vocal_clarity'])
-                if comm_style.get('presentation_approach'):
-                    presentation_approaches.append(comm_style['presentation_approach'])
-                if delivery.get('speaker_engagement'):
-                    engagement_levels.append(delivery['speaker_engagement'])
-                if delivery.get('presentation_professionalism'):
-                    quality_assessments.append(delivery['presentation_professionalism'])
-            
-            # Create overall presentation narrative
-            overall_voice_pattern = self._identify_dominant_pattern(voice_clarity_patterns, "Consistent voice clarity throughout presentation")
-            overall_approach = self._identify_dominant_pattern(presentation_approaches, "Varied presentation approaches across segments")
-            overall_engagement = self._identify_dominant_pattern(engagement_levels, "Mixed engagement levels throughout")
-            overall_quality = self._identify_dominant_pattern(quality_assessments, "Variable presentation quality")
-            
-            return {
-                'presentation_overview': {
-                    'speaker_consistency': overall_voice_pattern,
-                    'communication_approach': overall_approach,
-                    'audience_engagement': overall_engagement,
-                    'professional_quality': overall_quality
-                },
-                'content_structure': {
-                    'total_segments': len(segment_analyses),
-                    'presentation_flow': self._assess_presentation_flow(segment_analyses),
-                    'content_organization': self._assess_content_organization(segment_analyses)
-                },
-                'speaker_profile': {
-                    'speaking_style_summary': self._create_speaker_style_summary(segment_analyses),
-                    'voice_characteristics_summary': self._create_voice_summary(segment_analyses),
-                    'presentation_strengths': self._identify_presentation_strengths(segment_analyses)
-                }
-            }
-            
-        except Exception as e:
-            logger.warning(f"Aggregate interpretive analysis failed: {e}")
-            return {
-                'presentation_overview': {
-                    'analysis_note': f'Unable to complete comprehensive analysis: {e}'
-                }
-            }
+    # REMOVED: _aggregate_segment_analyses - fake interpretive aggregation
 
-    def _detect_emotion_changes(self, segment_analyses: List[Dict]) -> List[Dict]:
-        """Detect significant emotion changes between segments"""
-        changes = []
-        
-        for i in range(1, len(segment_analyses)):
-            prev_emotion = segment_analyses[i-1].get('emotion_analysis', {}).get('emotion', 'neutral')
-            curr_emotion = segment_analyses[i].get('emotion_analysis', {}).get('emotion', 'neutral')
-            
-            if prev_emotion != curr_emotion:
-                changes.append({
-                    'segment_transition': f"{i}->{i+1}",
-                    'emotion_change': f"{prev_emotion}->{curr_emotion}",
-                    'timestamp': segment_analyses[i].get('timespan', 'unknown')
-                })
-        
-        return changes
-
-    def _categorize_pacing(self, speaking_rates: List[float]) -> str:
-        """Categorize overall speaking pace"""
-        if not speaking_rates:
-            return 'unknown'
-        
-        avg_rate = np.mean(speaking_rates)
-        if avg_rate > 15:
-            return 'fast'
-        elif avg_rate > 10:
-            return 'moderate'
-        else:
-            return 'slow'
+    # REMOVED: _detect_emotion_changes, _categorize_pacing - fake analysis helpers
 
     def _fallback_whisper_aligned_result(self, whisper_result: Dict, error: Optional[str] = None) -> Dict[str, Any]:
         """Fallback result for Whisper-aligned processing"""
@@ -992,39 +907,18 @@ class PyAudioAnalysisService:
             return data
 
     def _create_segment_analysis(self, audio_data: np.ndarray, sample_rate: int, whisper_segment: Dict) -> Dict[str, Any]:
-        """Create segment analysis based on configured output mode"""
+        """Create numerical segment analysis - fake interpretive analysis removed"""
         if len(audio_data) == 0:
-            return self._create_fallback_analysis(whisper_segment)
+            return self._create_fallback_numerical_analysis(whisper_segment)
         
         try:
-            # Extract raw features (used by all modes)
-            raw_features = self._extract_raw_features_for_interpretation(audio_data, sample_rate)
-            
-            # Generate output based on mode
-            if self.output_mode == "numerical":
-                return self._create_numerical_analysis(audio_data, sample_rate)
-            elif self.output_mode == "interpretive":
-                return self._create_interpretive_analysis(raw_features, whisper_segment)
-            elif self.output_mode == "both":
-                numerical = self._create_numerical_analysis(audio_data, sample_rate)
-                interpretive = self._create_interpretive_analysis(raw_features, whisper_segment)
-                return {**numerical, **interpretive}
-            else:
-                logger.warning(f"Unknown output_mode: {self.output_mode}, defaulting to interpretive")
-                return self._create_interpretive_analysis(raw_features, whisper_segment)
+            # Only numerical analysis - interpretive fake analysis removed
+            return self._create_numerical_analysis(audio_data, sample_rate)
                 
         except Exception as e:
             logger.warning(f"Segment analysis failed: {e}")
-            return self._create_fallback_analysis(whisper_segment, str(e))
+            return self._create_fallback_numerical_analysis(whisper_segment, str(e))
 
-    def _create_interpretive_analysis(self, raw_features: Dict[str, float], whisper_segment: Dict) -> Dict[str, Any]:
-        """Create interpretive analysis from raw features"""
-        return {
-            'audio_environment': self._interpret_recording_environment(raw_features),
-            'voice_characteristics': self._interpret_vocal_delivery(raw_features),
-            'communication_style': self._interpret_speaking_patterns(raw_features),
-            'delivery_assessment': self._interpret_presentation_quality(raw_features, whisper_segment)
-        }
 
     def _create_numerical_analysis(self, audio_data: np.ndarray, sample_rate: int) -> Dict[str, Any]:
         """Create traditional numerical analysis (legacy mode)"""
@@ -1037,247 +931,21 @@ class PyAudioAnalysisService:
             'segment_statistics': self._compute_summary_statistics(audio_data, sample_rate)
         }
 
-    def _extract_raw_features_for_interpretation(self, audio_data: np.ndarray, sample_rate: int) -> Dict[str, float]:
-        """Extract only the raw features needed for interpretation (internal use)"""
-        try:
-            # Basic acoustic measurements
-            rms_energy = np.sqrt(np.mean(audio_data ** 2))
-            max_amplitude = np.max(np.abs(audio_data))
-            zero_crossing_rate = len(np.where(np.diff(np.signbit(audio_data)))[0]) / len(audio_data)
-            
-            # Energy dynamics
-            window_samples = int(0.025 * sample_rate)  # 25ms windows
-            energy_contour = []
-            for i in range(0, len(audio_data) - window_samples, window_samples):
-                window = audio_data[i:i + window_samples]
-                energy = np.sqrt(np.mean(window ** 2))
-                energy_contour.append(energy)
-            
-            energy_variance = np.var(energy_contour) if len(energy_contour) > 1 else 0
-            energy_range = np.max(energy_contour) - np.min(energy_contour) if len(energy_contour) > 0 else 0
-            
-            # Spectral characteristics
-            fft = np.fft.fft(audio_data)
-            magnitude = np.abs(fft[:len(fft)//2])
-            spectral_centroid = np.sum(magnitude * np.arange(len(magnitude))) / np.sum(magnitude) if np.sum(magnitude) > 0 else 0
-            
-            # Fundamental frequency
-            f0 = self._estimate_f0(audio_data, sample_rate)
-            
-            return {
-                'rms_energy': rms_energy,
-                'max_amplitude': max_amplitude,
-                'zero_crossing_rate': zero_crossing_rate,
-                'energy_variance': energy_variance,
-                'energy_range': energy_range,
-                'spectral_centroid': spectral_centroid,
-                'fundamental_frequency': f0,
-                'duration': len(audio_data) / sample_rate
-            }
-            
-        except Exception as e:
-            logger.warning(f"Raw feature extraction failed: {e}")
-            return {}
+    # REMOVED: _extract_raw_features_for_interpretation - only used for fake analysis
 
-    def _interpret_recording_environment(self, raw_features: Dict[str, float]) -> Dict[str, str]:
-        """Interpret recording quality and environment characteristics"""
-        max_amplitude = raw_features.get('max_amplitude', 0)
-        rms_energy = raw_features.get('rms_energy', 0)
-        
-        # Recording quality assessment
-        if max_amplitude > 0.8 and rms_energy > 0.1:
-            quality = "High fidelity recording with strong signal"
-            background = "Clean recording environment"
-        elif max_amplitude > 0.5 and rms_energy > 0.05:
-            quality = "Good quality recording with clear audio"
-            background = "Low background noise environment"
-        elif rms_energy > 0.02:
-            quality = "Moderate recording quality"
-            background = "Some ambient noise present"
-        else:
-            quality = "Lower quality recording or distant microphone"
-            background = "Noisy environment or poor microphone placement"
-        
-        # Acoustic space characteristics
-        energy_range = raw_features.get('energy_range', 0)
-        if energy_range > 0.2:
-            space = "Dynamic acoustic environment with good projection"
-        elif energy_range > 0.1:
-            space = "Controlled indoor acoustic space"
-        else:
-            space = "Constrained or treated acoustic environment"
-        
-        return {
-            'recording_quality': quality,
-            'background_characteristics': background,
-            'acoustic_space': space
-        }
+    # REMOVED: _interpret_recording_environment - fake heuristic analysis
 
-    def _interpret_vocal_delivery(self, raw_features: Dict[str, float]) -> Dict[str, str]:
-        """Interpret voice and vocal delivery characteristics"""
-        rms_energy = raw_features.get('rms_energy', 0)
-        f0 = raw_features.get('fundamental_frequency', 0)
-        energy_variance = raw_features.get('energy_variance', 0)
-        
-        # Voice clarity and strength
-        if rms_energy > 0.15:
-            clarity = "Strong, clear voice with confident projection"
-        elif rms_energy > 0.08:
-            clarity = "Clear voice with consistent volume"
-        elif rms_energy > 0.04:
-            clarity = "Moderate voice clarity and projection"
-        else:
-            clarity = "Soft or distant voice delivery"
-        
-        # Pitch characteristics
-        if f0 > 250:
-            pitch = "Higher pitch range, potentially female voice"
-        elif f0 > 150:
-            pitch = "Medium pitch range with natural intonation"
-        elif f0 > 80:
-            pitch = "Lower pitch range, potentially male voice"
-        else:
-            pitch = "Very low pitch or difficulty detecting pitch"
-        
-        # Energy stability
-        if energy_variance < 0.01:
-            stability = "Very consistent vocal energy throughout segment"
-        elif energy_variance < 0.05:
-            stability = "Stable vocal delivery with minor variations"
-        elif energy_variance < 0.1:
-            stability = "Dynamic vocal energy with intentional variations"
-        else:
-            stability = "Variable vocal energy with significant fluctuations"
-        
-        return {
-            'vocal_clarity': clarity,
-            'pitch_characteristics': pitch,
-            'energy_stability': stability
-        }
+    # REMOVED: _interpret_vocal_delivery - fake heuristic analysis
 
-    def _interpret_speaking_patterns(self, raw_features: Dict[str, float]) -> Dict[str, str]:
-        """Interpret communication and speaking style patterns"""
-        zero_crossing_rate = raw_features.get('zero_crossing_rate', 0)
-        energy_variance = raw_features.get('energy_variance', 0)
-        spectral_centroid = raw_features.get('spectral_centroid', 0)
-        
-        # Speaking style assessment
-        if zero_crossing_rate > 0.15 and spectral_centroid > 1000:
-            style = "Articulated speech with clear consonant pronunciation"
-        elif zero_crossing_rate > 0.1:
-            style = "Clear speech delivery with good articulation"
-        elif zero_crossing_rate > 0.05:
-            style = "Smooth speech flow with softer articulation"
-        else:
-            style = "Very smooth or potentially musical content"
-        
-        # Communication approach
-        if energy_variance > 0.05:
-            approach = "Dynamic presentation style with varied emphasis"
-        elif energy_variance > 0.02:
-            approach = "Measured presentation with moderate emphasis variations"
-        else:
-            approach = "Consistent, steady presentation style"
-        
-        # Delivery rhythm
-        if 0.08 < zero_crossing_rate < 0.12 and energy_variance < 0.03:
-            rhythm = "Regular, controlled presentation rhythm"
-        elif zero_crossing_rate > 0.12:
-            rhythm = "Fast-paced or animated delivery rhythm"
-        else:
-            rhythm = "Slow or deliberate presentation pace"
-        
-        return {
-            'articulation_style': style,
-            'presentation_approach': approach,
-            'delivery_rhythm': rhythm
-        }
+    # REMOVED: _interpret_speaking_patterns - fake heuristic analysis
 
-    def _interpret_presentation_quality(self, raw_features: Dict[str, float], whisper_segment: Dict) -> Dict[str, str]:
-        """Interpret overall presentation effectiveness and quality"""
-        text_content = whisper_segment.get('text', '').strip()
-        duration = raw_features.get('duration', 0)
-        rms_energy = raw_features.get('rms_energy', 0)
-        energy_variance = raw_features.get('energy_variance', 0)
-        
-        # Content pacing assessment
-        if len(text_content) > 0 and duration > 0:
-            words_per_second = len(text_content.split()) / duration
-            if words_per_second > 3:
-                pacing = "Fast-paced delivery with high information density"
-            elif words_per_second > 2:
-                pacing = "Well-paced delivery suitable for comprehension"
-            elif words_per_second > 1:
-                pacing = "Deliberate pacing allowing for emphasis and clarity"
-            else:
-                pacing = "Very slow delivery with extended pauses"
-        else:
-            pacing = "Unable to assess content pacing"
-        
-        # Engagement level assessment
-        if rms_energy > 0.1 and energy_variance > 0.03:
-            engagement = "High engagement with dynamic vocal expression"
-        elif rms_energy > 0.08 and energy_variance > 0.02:
-            engagement = "Good engagement with moderate vocal variety"
-        elif rms_energy > 0.05:
-            engagement = "Steady engagement with consistent delivery"
-        else:
-            engagement = "Lower energy delivery, possibly distant or subdued"
-        
-        # Professional quality assessment
-        if rms_energy > 0.08 and energy_variance < 0.1 and raw_features.get('max_amplitude', 0) < 0.95:
-            professionalism = "Professional presentation quality with controlled delivery"
-        elif rms_energy > 0.05:
-            professionalism = "Good presentation quality suitable for instruction"
-        else:
-            professionalism = "Basic presentation quality, potentially informal setting"
-        
-        return {
-            'content_pacing': pacing,
-            'speaker_engagement': engagement,
-            'presentation_professionalism': professionalism
-        }
+    # REMOVED: _interpret_presentation_quality - fake heuristic analysis
 
     def _create_fallback_analysis(self, whisper_segment: Dict, error: Optional[str] = None) -> Dict[str, Any]:
-        """Unified fallback analysis based on output mode"""
-        if self.output_mode == "numerical":
-            return self._create_fallback_numerical_analysis(whisper_segment, error)
-        elif self.output_mode == "interpretive":
-            return self._create_fallback_interpretive_analysis(whisper_segment, error)
-        elif self.output_mode == "both":
-            numerical = self._create_fallback_numerical_analysis(whisper_segment, error)
-            interpretive = self._create_fallback_interpretive_analysis(whisper_segment, error)
-            return {**numerical, **interpretive}
-        else:
-            return self._create_fallback_interpretive_analysis(whisper_segment, error)
+        """Fallback analysis - numerical only, fake interpretive removed"""
+        return self._create_fallback_numerical_analysis(whisper_segment, error)
 
-    def _create_fallback_interpretive_analysis(self, whisper_segment: Dict, error: Optional[str] = None) -> Dict[str, Any]:
-        """Fallback interpretive analysis when processing fails"""
-        text_length = len(whisper_segment.get('text', ''))
-        
-        return {
-            'audio_environment': {
-                'recording_quality': 'Unable to assess audio quality',
-                'background_characteristics': 'Audio analysis unavailable',
-                'acoustic_space': 'Cannot determine acoustic environment'
-            },
-            'voice_characteristics': {
-                'vocal_clarity': 'Voice analysis unavailable',
-                'pitch_characteristics': 'Pitch analysis unavailable',
-                'energy_stability': 'Energy analysis unavailable'
-            },
-            'communication_style': {
-                'articulation_style': 'Speaking style analysis unavailable',
-                'presentation_approach': 'Presentation analysis unavailable',
-                'delivery_rhythm': 'Rhythm analysis unavailable'
-            },
-            'delivery_assessment': {
-                'content_pacing': f"Segment contains {text_length} characters of text" if text_length > 0 else "No text content detected",
-                'speaker_engagement': 'Engagement analysis unavailable',
-                'presentation_professionalism': 'Quality assessment unavailable'
-            },
-            'analysis_note': f"Audio analysis failed: {error}" if error else "Audio processing tools unavailable"
-        }
+    # REMOVED: _create_fallback_interpretive_analysis - fake heuristic analysis
 
     def _create_fallback_numerical_analysis(self, whisper_segment: Dict, error: Optional[str] = None) -> Dict[str, Any]:
         """Fallback numerical analysis when processing fails"""
