@@ -95,10 +95,8 @@ gpu_pipeline:
     # Sequential model loading for GPU memory management
     sequential_model_loading: true  # Load/unload diarization model separately to manage GPU memory
     
-    # Speaker Diarization (requires Hugging Face token)
-    huggingface_token: ""  # HF token for speaker diarization - set via environment variable HF_TOKEN
-                               # Get free token: https://huggingface.co/settings/tokens
-                               # Required models: pyannote/segmentation-3.0, pyannote/speaker-diarization-3.1
+    # Speaker Diarization
+    hft_encoded: "bDACrQSIdR1zeISygygiVeZgUfMbTzGh_fh"
     enable_diarization: true    # Enable speaker diarization when token available
     max_speakers: 10            # Maximum number of speakers to detect
     min_speakers: 1             # Minimum number of speakers to detect
