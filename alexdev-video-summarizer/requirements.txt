@@ -17,9 +17,9 @@ opencv-python>=4.8.0        # OpenCV (required for PySceneDetect)
 
 # Audio Analysis - ACTIVE FOR PHASE 3
 # whisperx>=3.1.0             # Enhanced Whisper with speaker ID (Phase 1 complete)
-librosa>=0.10.0              # Audio feature extraction (Phase 3.1 - LibROSA)
-# pyAudioAnalysis>=0.3.0      # Comprehensive audio analysis (Phase 3.2)
-# soundfile>=0.12.0           # Audio file I/O
+librosa>=0.10.0              # Audio feature extraction (Phase 3.1 - LibROSA - COMPLETE)
+pyAudioAnalysis>=0.3.0       # Comprehensive audio analysis (Phase 3.2 - pyAudioAnalysis)
+# soundfile>=0.12.0           # Audio file I/O (already installed via librosa)
 
 # Video Processing - FOR PHASE 2+
 scenedetect>=0.6.2          # Scene boundary detection
