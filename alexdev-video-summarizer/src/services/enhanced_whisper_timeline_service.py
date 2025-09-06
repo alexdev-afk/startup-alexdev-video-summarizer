@@ -97,8 +97,9 @@ class EnhancedWhisperTimelineService:
             self._add_speech_spans(timeline, segments)
             
             # Add processing notes for auditing
-            timeline.add_processing_note(f"Processed {len(segments)} VAD segments")
-            timeline.add_processing_note(f"Generated {len(timeline.spans)} speech spans")
+            timeline.add_processing_note(f"Processed {len(segments)} Whisper segments from VAD regions")
+            timeline.add_processing_note(f"VAD reconstruction: {len(timeline.spans)} timeline spans (1:1 with VAD regions)")
+            timeline.add_processing_note(f"Using WhisperWithVAD approach for optimal transcription quality")
             
             logger.info(f"Enhanced timeline complete: {len(timeline.spans)} spans, {sum(len(s.events) for s in timeline.spans)} events")
             return timeline
@@ -116,39 +117,116 @@ class EnhancedWhisperTimelineService:
         return 0.0
     
     def _add_speech_spans(self, timeline: EnhancedTimeline, segments: List[Dict[str, Any]]):
-        """Add speech spans with nested word events - Whisper's primary expertise"""
+        """
+        Add speech spans with VAD region reconstruction
+        
+        Groups multiple Whisper segments back into single VAD regions for proper granularity.
+        This follows WhisperWithVAD approach: accept Whisper's internal segmentation but 
+        reconstruct the original VAD boundaries for timeline structure.
+        """
+        
+        # Group segments by VAD chunk ID to maintain 1:1 VAD region to timeline span mapping
+        vad_groups = {}
+        for segment in segments:
+            vad_chunk_id = segment.get('vad_chunk_id', 0)
+            if vad_chunk_id not in vad_groups:
+                vad_groups[vad_chunk_id] = []
+            vad_groups[vad_chunk_id].append(segment)
+        
+        logger.debug(f"Reconstructing {len(segments)} Whisper segments into {len(vad_groups)} VAD regions")
         
         previous_speaker = None
         
-        for i, segment in enumerate(segments):
-            is_first_span = (i == 0)
-            is_last_span = (i == len(segments) - 1)
-            start_time = segment.get('start', 0)
-            end_time = segment.get('end', 0)
-            text = segment.get('text', '').strip()
-            speaker = segment.get('speaker', 'Unknown')
-            confidence = segment.get('confidence', 1.0)
+        # Process each VAD group as one timeline span (WhisperWithVAD approach)
+        for chunk_id in sorted(vad_groups.keys()):
+            chunk_segments = vad_groups[chunk_id]
+            is_first_span = (chunk_id == min(vad_groups.keys()))
+            is_last_span = (chunk_id == max(vad_groups.keys()))
             
-            if not text or start_time >= end_time:
+            # Combine all segments in this VAD region like WhisperWithVAD does
+            combined_text_parts = []
+            all_words = []
+            min_start = float('inf')
+            max_end = float('-inf')
+            weighted_confidence_sum = 0.0
+            total_duration = 0.0
+            speaker_durations = {}
+            
+            for segment in chunk_segments:
+                start_time = segment.get('start', 0)
+                end_time = segment.get('end', 0)
+                text = segment.get('text', '').strip()
+                speaker = segment.get('speaker', 'Unknown')
+                confidence = segment.get('confidence', 1.0)
+                words = segment.get('words', [])
+                
+                if not text or start_time >= end_time:
+                    continue
+                    
+                combined_text_parts.append(text)
+                all_words.extend(words)
+                min_start = min(min_start, start_time)
+                max_end = max(max_end, end_time)
+                
+                # Weight confidence by segment duration for accuracy
+                segment_duration = end_time - start_time
+                weighted_confidence_sum += confidence * segment_duration
+                total_duration += segment_duration
+                
+                # Track speaker duration to determine primary speaker for VAD region
+                speaker_durations[speaker] = speaker_durations.get(speaker, 0) + segment_duration
+            
+            if not combined_text_parts:
                 continue
+                
+            # Determine primary speaker (most speaking time in this VAD region)
+            primary_speaker = max(speaker_durations, key=speaker_durations.get) if speaker_durations else 'Unknown'
             
-            # Create speech span (Whisper's primary output)
-            speech_span = create_speech_span(start_time, end_time, text, speaker, confidence)
+            # Calculate weighted average confidence
+            final_confidence = weighted_confidence_sum / total_duration if total_duration > 0 else 1.0
             
-            # Add word events within this span
+            # Combine text with proper spacing (preserve natural flow)
+            combined_text = ' '.join(combined_text_parts).strip()
+            
+            # Create speech span for the entire VAD region 
+            speech_span = create_speech_span(min_start, max_end, combined_text, primary_speaker, final_confidence)
+            
+            # Add all word events within this span
             if self.generate_word_events:
-                self._add_word_events_to_span(speech_span, segment, is_first_span, is_last_span)
+                for word_data in all_words:
+                    word_text = word_data.get('word', '').strip()
+                    if not word_text:
+                        continue
+                        
+                    word_confidence = word_data.get('confidence', word_data.get('probability', 1.0))
+                    word_timestamp = word_data.get('start', 0)
+                    
+                    # Skip low confidence words
+                    if word_confidence < self.word_confidence_threshold:
+                        continue
+                    
+                    # Use primary speaker for all words in this VAD region for consistency
+                    word_event = create_word_event(word_timestamp, word_text, word_confidence, primary_speaker)
+                    
+                    try:
+                        speech_span.add_event(word_event, is_first_span=is_first_span, is_last_span=is_last_span)
+                    except ValueError:
+                        # Word timestamp outside span range - log but continue
+                        logger.debug(f"Word event outside VAD span range: {word_text} at {word_timestamp:.2f}s")
+                        continue
             
-            # Add speaker change event if detected
+            # Add speaker change event if detected between VAD regions
             if (self.generate_speaker_events and 
                 previous_speaker is not None and 
-                speaker != previous_speaker):
+                primary_speaker != previous_speaker):
                 
-                speaker_event = create_speaker_change_event(start_time, previous_speaker, speaker)
+                speaker_event = create_speaker_change_event(min_start, previous_speaker, primary_speaker)
                 speech_span.add_event(speaker_event, is_first_span=is_first_span, is_last_span=is_last_span)
             
             timeline.add_span(speech_span)
-            previous_speaker = speaker
+            previous_speaker = primary_speaker
+            
+        logger.debug(f"VAD reconstruction complete: {len(vad_groups)} VAD regions -> {len(timeline.spans)} timeline spans")
     
     def _add_word_events_to_span(self, span: TimelineSpan, segment: Dict[str, Any], is_first_span: bool = False, is_last_span: bool = False):
         """Add word events within a speech span"""

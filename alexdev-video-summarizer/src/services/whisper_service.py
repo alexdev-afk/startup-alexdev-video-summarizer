@@ -489,25 +489,37 @@ class WhisperService:
                 if i > 0 and timestamp["start"] < speech_timestamps[i - 1]["end"]:
                     timestamp["start"] = speech_timestamps[i - 1]["end"]
             
-            # Process each VAD region as its own chunk (simplified approach)
-            # No grouping - each VAD region becomes one chunk for individual Whisper processing
+            # Group VAD regions by chunk_threshold (following WhisperWithVAD reference)
+            # If breaks are longer than chunk_threshold seconds, split into a new chunk
+            chunk_threshold_samples = int(self.chunk_threshold * VAD_SR)
+            vad_chunks = [[]]
+            
+            for timestamp in speech_timestamps:
+                if (len(vad_chunks[-1]) > 0 and 
+                    timestamp["start"] > vad_chunks[-1][-1]["end"] + chunk_threshold_samples):
+                    vad_chunks.append([])
+                vad_chunks[-1].append(timestamp)
+            
+            logger.debug(f"Grouped {len(speech_timestamps)} VAD regions into {len(vad_chunks)} chunks using chunk_threshold={self.chunk_threshold}s")
+            
+            # Process grouped chunks (each chunk contains multiple VAD regions)
             processed_chunks = []
-            for region_idx, timestamp in enumerate(speech_timestamps):
-                # Each region becomes one chunk
-                chunk_timestamps = [timestamp]
+            for chunk_idx, chunk_timestamps in enumerate(vad_chunks):
+                if not chunk_timestamps:
+                    continue
                 
-                # Collect audio data for this region
+                # Collect audio data for this chunk (multiple VAD regions combined)
                 chunk_audio = collect_chunks(chunk_timestamps, wav)
                 
-                # Calculate region timing in whole-file context
-                chunk_start_seconds = timestamp["start"] / VAD_SR
-                chunk_end_seconds = timestamp["end"] / VAD_SR
+                # Calculate chunk timing in whole-file context
+                chunk_start_seconds = chunk_timestamps[0]["start"] / VAD_SR
+                chunk_end_seconds = chunk_timestamps[-1]["end"] / VAD_SR
                 
-                # Offset is just the start time (no complex calculation needed)
+                # Calculate offset (account for gaps between regions within chunk)
                 offset = chunk_start_seconds
                 
                 processed_chunks.append({
-                    'chunk_id': region_idx,
+                    'chunk_id': chunk_idx,
                     'start_seconds': chunk_start_seconds,
                     'end_seconds': chunk_end_seconds,
                     'duration': chunk_end_seconds - chunk_start_seconds,
@@ -515,9 +527,9 @@ class WhisperService:
                     'offset': offset,
                     'vad_segments': [
                         {
-                            'start': timestamp["start"] / VAD_SR,
-                            'end': timestamp["end"] / VAD_SR
-                        }
+                            'start': ts["start"] / VAD_SR,
+                            'end': ts["end"] / VAD_SR
+                        } for ts in chunk_timestamps
                     ],
                     'sampling_rate': VAD_SR
                 })
@@ -668,18 +680,18 @@ class WhisperService:
             if self.original_whisper_model:
                 # Original Whisper transcription (current working mode)
                 logger.debug("Using original Whisper for transcription")
+                # Prevent aggressive segmentation: use context and lower temperature
                 transcription_options = {
                     'task': 'transcribe',
                     'word_timestamps': self.enable_word_timestamps,
-                    'condition_on_previous_text': False,
-                    'temperature': 0,
-                    'no_speech_threshold': 0.6,
+                    'condition_on_previous_text': True,  # Provide context to prevent mid-phrase splits
+                    'temperature': 0,  # Deterministic to prevent random segmentation
                 }
                 
-                # Set language if not auto-detect
+                # Set language if not auto-detect (only essential parameter)
                 if self.language != 'auto':
                     transcription_options['language'] = self.language
-                    
+                
                 result = self.original_whisper_model.transcribe(str(temp_chunk_path), **transcription_options)
                 
             # FUTURE: WhisperX transcription path - currently disabled due to hardware compatibility
@@ -710,14 +722,15 @@ class WhisperService:
                 import whisper
                 cpu_model = whisper.load_model(self.model_size, device='cpu')
                 
+                # Prevent aggressive segmentation: use context and lower temperature
                 transcription_options = {
                     'task': 'transcribe',
                     'word_timestamps': self.enable_word_timestamps,
-                    'condition_on_previous_text': False,
-                    'temperature': 0,
-                    'no_speech_threshold': 0.6,
+                    'condition_on_previous_text': True,  # Provide context to prevent mid-phrase splits
+                    'temperature': 0,  # Deterministic to prevent random segmentation
                 }
                 
+                # Set language if not auto-detect (only essential parameter)
                 if self.language != 'auto':
                     transcription_options['language'] = self.language
                 
@@ -779,7 +792,7 @@ class WhisperService:
     
     def _is_hallucination(self, segment: Dict[str, Any]) -> bool:
         """
-        Filter common Whisper hallucinations (adapted from WhisperWithVAD)
+        Filter common Whisper hallucinations (already tuned)
         """
         text = segment.get('text', '').strip().lower()
         

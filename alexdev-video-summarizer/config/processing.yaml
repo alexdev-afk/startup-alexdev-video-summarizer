@@ -78,9 +78,9 @@ gpu_pipeline:
     use_original_whisper: true  # Fallback to original Whisper for GPU compatibility
     enable_silero_vad: true     # Add Silero VAD for better segmentation
     
-    # VAD Settings (Voice Activity Detection)
-    vad_threshold: 0.4          # Silero VAD sensitivity (0.1-0.9)
-    chunk_threshold: 3.0        # Split chunks on gaps > 3 seconds (legacy setting)
+    # VAD Settings (Voice Activity Detection) - Optimized for 4 chunks
+    vad_threshold: 0.3          # Voice activity detection sensitivity
+    chunk_threshold: 3.0        # Gap required to split chunks
     
     # Word timestamps (original Whisper supports this)
     enable_word_timestamps: true # Enable word-level timestamps
