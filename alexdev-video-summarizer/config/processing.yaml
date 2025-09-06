@@ -78,9 +78,9 @@ gpu_pipeline:
     use_original_whisper: true  # Fallback to original Whisper for GPU compatibility
     enable_silero_vad: true     # Add Silero VAD for better segmentation
     
-    # VAD Settings (Voice Activity Detection) - Optimized for 4 chunks
+    # VAD Settings (Voice Activity Detection) - Optimized for fast-paced ads
     vad_threshold: 0.3          # Voice activity detection sensitivity
-    chunk_threshold: 3.0        # Gap required to split chunks
+    chunk_threshold: 1.0        # Gap required to split chunks (1s for fast-paced ads)
     
     # Word timestamps (original Whisper supports this)
     enable_word_timestamps: true # Enable word-level timestamps
