@@ -20,7 +20,13 @@ whisperx>=3.1.0              # Enhanced Whisper with speaker diarization (UPGRAD
 torch>=2.0.0                 # Required for WhisperX and Silero VAD
 soundfile>=0.12.0            # Audio file I/O for VAD chunk processing
 librosa>=0.10.0              # Audio feature extraction (Phase 3.1 - LibROSA - COMPLETE)
-pyAudioAnalysis>=0.3.0       # Comprehensive audio analysis (Phase 3.2 - pyAudioAnalysis)
+
+# pyAudioAnalysis and its missing dependencies (Phase 3.2 - pyAudioAnalysis)
+pyAudioAnalysis>=0.3.0       # Comprehensive audio analysis
+eyed3>=0.9.0                 # Audio metadata (required by pyAudioAnalysis)
+pydub>=0.25.0                # Audio format handling (required by pyAudioAnalysis)
+plotly>=5.0.0                # Data visualization (required by pyAudioAnalysis)
+hmmlearn>=0.3.0              # Hidden Markov Models (required by pyAudioAnalysis)
 # Note: Silero VAD loaded via torch.hub (no separate package needed)
 
 # Video Processing - FOR PHASE 2+

@@ -623,8 +623,8 @@ class WhisperService:
             chunk_end = segment.get('chunk_end', 0)
             
             # Calculate whole-file timestamp
-            whole_file_start = vad_chunk_info.get('start', 0) + chunk_start
-            whole_file_end = vad_chunk_info.get('start', 0) + chunk_end
+            whole_file_start = vad_chunk_info.get('start_seconds', 0) + chunk_start
+            whole_file_end = vad_chunk_info.get('start_seconds', 0) + chunk_end
             
             reconstructed_segment = {
                 'start': whole_file_start,
@@ -632,7 +632,7 @@ class WhisperService:
                 'duration': whole_file_end - whole_file_start,
                 'text': segment.get('text', ''),
                 'confidence': segment.get('confidence', 0.0),
-                'words': segment.get('words', []),
+                'words': self._reconstruct_word_timestamps(segment.get('words', []), vad_chunk_info.get('start_seconds', 0)),
                 'speaker': segment.get('speaker', 'Unknown'),
                 'vad_chunk_id': segment.get('chunk_id', 0),
                 'original_chunk_timing': {

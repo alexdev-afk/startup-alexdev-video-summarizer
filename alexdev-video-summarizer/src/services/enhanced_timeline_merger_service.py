@@ -105,9 +105,20 @@ class EnhancedTimelineMergerService:
                 master_timeline.add_span(span)
             
             # Collect standalone events (events not within any span)
+            # Exclude events that were already nested into unified spans
             standalone_events = []
+            nested_event_timestamps = set()
+            
+            # Track which events were nested into unified spans
+            for span in all_spans:
+                for event in span.events:
+                    nested_event_timestamps.add(event.timestamp)
+            
+            # Add events that weren't nested into any span
             for timeline in timelines:
-                standalone_events.extend(timeline.events)
+                for event in timeline.events:
+                    if event.timestamp not in nested_event_timestamps:
+                        standalone_events.append(event)
             
             # Sort standalone events chronologically
             sorted_standalone_events = sorted(standalone_events, key=lambda e: e.timestamp)
@@ -286,29 +297,25 @@ class EnhancedTimelineMergerService:
                 }
             )
             
-            # Find matching LibROSA events for this span
+            # Find LibROSA standalone events that fall within this unified span
             for timeline in librosa_timelines:
-                for span in timeline.spans:
-                    if abs(span.start - base_span.start) < 0.01 and abs(span.end - base_span.end) < 0.01:
-                        # Add LibROSA events to unified span
-                        for event in span.events:
-                            try:
-                                unified_span.add_event(event, is_first_span=is_first_span, is_last_span=is_last_span)
-                            except ValueError:
-                                # Event outside span boundaries - will be standalone
-                                logger.debug(f"LibROSA event {event.timestamp} outside unified span {unified_span.start}-{unified_span.end}")
+                for event in timeline.events:
+                    if unified_span.start <= event.timestamp <= unified_span.end:
+                        try:
+                            unified_span.add_event(event, is_first_span=is_first_span, is_last_span=is_last_span)
+                            logger.debug(f"Added LibROSA event {event.timestamp} to unified span [{unified_span.start}, {unified_span.end}]")
+                        except ValueError:
+                            logger.debug(f"LibROSA event {event.timestamp} rejected by unified span {unified_span.start}-{unified_span.end}")
             
-            # Find matching PyAudio events for this span
+            # Find PyAudio standalone events that fall within this unified span
             for timeline in pyaudio_timelines:
-                for span in timeline.spans:
-                    if abs(span.start - base_span.start) < 0.01 and abs(span.end - base_span.end) < 0.01:
-                        # Add PyAudio events to unified span
-                        for event in span.events:
-                            try:
-                                unified_span.add_event(event, is_first_span=is_first_span, is_last_span=is_last_span)
-                            except ValueError:
-                                # Event outside span boundaries - will be standalone
-                                logger.debug(f"PyAudio event {event.timestamp} outside unified span {unified_span.start}-{unified_span.end}")
+                for event in timeline.events:
+                    if unified_span.start <= event.timestamp <= unified_span.end:
+                        try:
+                            unified_span.add_event(event, is_first_span=is_first_span, is_last_span=is_last_span)
+                            logger.debug(f"Added PyAudio event {event.timestamp} to unified span [{unified_span.start}, {unified_span.end}]")
+                        except ValueError:
+                            logger.debug(f"PyAudio event {event.timestamp} rejected by unified span {unified_span.start}-{unified_span.end}")
             
             unified_spans.append(unified_span)
         
