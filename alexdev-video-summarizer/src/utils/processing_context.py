@@ -25,6 +25,7 @@ class VideoProcessingContext:
     scene_data: Optional[Dict[str, Any]] = None
     build_directory: Optional[Path] = None
     scene_analysis: Dict[str, Any] = field(default_factory=dict)
+    video_analysis_results: Optional[Dict[str, Any]] = None
     processing_metadata: Dict[str, Any] = field(default_factory=dict)
     
     def __post_init__(self):
@@ -138,6 +139,7 @@ class VideoProcessingContext:
             },
             'scene_data': self.scene_data,
             'scene_analysis': self.scene_analysis,
+            'video_analysis_results': self.video_analysis_results,
             'processing_metadata': self.processing_metadata
         }
     

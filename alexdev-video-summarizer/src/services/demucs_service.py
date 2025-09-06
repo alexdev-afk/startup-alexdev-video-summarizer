@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Dict, Any, Tuple
 
 from utils.logger import get_logger
-from utils.processing_context import ProcessingContext
+from utils.processing_context import VideoProcessingContext
 
 logger = get_logger(__name__)
 
@@ -23,7 +23,7 @@ class DemucsService:
         self.paths_config = config.get('paths', {})
         logger.info("DemucsService initialized.")
 
-    def separate_audio(self, context: ProcessingContext) -> Tuple[Path, Path]:
+    def separate_audio(self, context: VideoProcessingContext) -> Tuple[Path, Path]:
         """
         Separates the main audio file into 'vocals' and 'no_vocals' stems.
 

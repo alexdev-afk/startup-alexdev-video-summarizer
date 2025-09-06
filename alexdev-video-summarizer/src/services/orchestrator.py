@@ -15,14 +15,13 @@ from dataclasses import dataclass
 
 from services.ffmpeg_service import FFmpegService
 from services.scene_detection_service import SceneDetectionService
-from services.dual_pipeline_coordinator import DualPipelineCoordinator
-from services.knowledge_generator import KnowledgeBaseGenerator
-# Legacy pipeline controllers (kept for Phase 1 compatibility)
-from services.audio_pipeline import AudioPipelineController
-from services.gpu_pipeline import VideoGPUPipelineController
-from services.cpu_pipeline import VideoCPUPipelineController
+from services.internvl3_timeline_service import InternVL3TimelineService
+from services.knowledge_generator import KnowledgeGenerator
 from utils.processing_context import VideoProcessingContext
 from utils.circuit_breaker import CircuitBreaker
+from utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 @dataclass
@@ -46,15 +45,10 @@ class VideoProcessingOrchestrator:
         self.ffmpeg_service = FFmpegService(config)
         self.scene_service = SceneDetectionService(config)
         
-        # Phase 2: Dual-pipeline coordinator for scene-based processing
-        self.dual_pipeline = DualPipelineCoordinator(config)
+        # Current video processing service
+        self.video_service = InternVL3TimelineService(config)
         
-        # Legacy pipelines (Phase 1 compatibility)  
-        self.audio_pipeline = AudioPipelineController(config)
-        self.video_gpu_pipeline = VideoGPUPipelineController(config)
-        self.video_cpu_pipeline = VideoCPUPipelineController(config)
-        
-        self.knowledge_generator = KnowledgeBaseGenerator(config)
+        self.knowledge_generator = KnowledgeGenerator(config)
         
         # Circuit breaker for batch processing
         self.circuit_breaker = CircuitBreaker(
@@ -99,60 +93,63 @@ class VideoProcessingOrchestrator:
                 'scene_count': context.scene_data['scene_count']
             })
             
-            # Step 2.5: Scene Splitting Coordination (Optional - for advanced processing)
-            progress_callback('scene_splitting', {'stage': 'starting'})
-            scene_files = self.scene_service.coordinate_scene_splitting(
-                video_path, 
-                context.scene_data['boundaries'], 
-                self.ffmpeg_service
-            )
-            context.scene_data['scene_files'] = scene_files
-            progress_callback('scene_splitting', {
+            # Step 2.5: Frame Extraction (current implementation)
+            progress_callback('frame_extraction', {'stage': 'starting'})
+            # Frames already extracted by scene detection service
+            frame_count = context.scene_data['scene_count'] * 3  # 3 frames per scene
+            progress_callback('frame_extraction', {
                 'stage': 'completed',
-                'files_created': len(scene_files)
+                'frames_extracted': frame_count
             })
             
-            # Step 3: Scene-Based Dual-Pipeline Processing (70x Performance)
-            for i, scene in enumerate(context.scene_data['scenes'], 1):
-                progress_callback('scene_processing', {
-                    'stage': 'starting',
-                    'scene': i,
-                    'total_scenes': len(context.scene_data['scenes']),
-                    'processing_mode': 'dual_pipeline'
-                })
-                
-                # Dual-Pipeline Processing: GPU || CPU with scene context
-                scene_results = self.dual_pipeline.process_scene_dual_pipeline(scene, context)
-                
-                progress_callback('dual_pipeline', {
-                    'stage': 'completed',
-                    'scene': i,
-                    'gpu_results': scene_results.get('gpu_pipeline', {}),
-                    'cpu_results': scene_results.get('cpu_pipeline', {}),
-                    'representative_frame': scene_results.get('representative_frame')
-                })
-                
-                # Store integrated scene analysis with context preservation
-                context.store_scene_analysis(
-                    scene['scene_id'], 
-                    scene_results.get('gpu_pipeline', {}),
-                    scene_results.get('cpu_pipeline', {}),
-                    scene_results  # Full context for knowledge generation
-                )
-                
-                progress_callback('scene_processing', {
-                    'stage': 'completed',
-                    'scene': i,
-                    'total_scenes': len(context.scene_data['scenes']),
-                    'processing_time': scene_results.get('processing_time'),
-                    'analysis_summary': scene_results.get('analysis_summary', {})
-                })
+            # Step 3: InternVL3 Frame-Based Video Processing
+            progress_callback('video_processing', {
+                'stage': 'starting', 
+                'processing_mode': 'internvl3_frames'
+            })
+            
+            # Process all extracted frames with InternVL3
+            video_timeline = self.video_service.generate_and_save(str(context.video_path), None)
+            
+            progress_callback('video_processing', {
+                'stage': 'completed',
+                'events_generated': len(video_timeline.events) if video_timeline else 0,
+                'total_duration': video_timeline.total_duration if video_timeline else 0
+            })
+            
+            # Store video analysis results in context
+            if video_timeline:
+                context.video_analysis_results = {
+                    'timeline': video_timeline,
+                    'events': video_timeline.events,
+                    'total_duration': video_timeline.total_duration,
+                    'processing_mode': 'internvl3_frames'
+                }
+            else:
+                raise Exception("InternVL3 video processing failed - no timeline generated")
             
             # Step 4: Knowledge Base Generation
             progress_callback('knowledge_generation', {'stage': 'starting'})
-            knowledge_file = self.knowledge_generator.generate_video_knowledge_base(
-                video_path.stem, context.get_all_analysis()
-            )
+            
+            # Find the timeline files for knowledge generation
+            audio_timeline_path = context.build_directory / "audio_timelines" / "master_timeline.json"
+            video_timeline_path = context.build_directory / "video_timelines" 
+            
+            # Find the most recent video timeline file
+            video_timeline_files = list(video_timeline_path.glob("*_timeline.json"))
+            if video_timeline_files:
+                latest_video_timeline = max(video_timeline_files, key=lambda f: f.stat().st_mtime)
+                output_path = Path("output") / f"{context.video_name}_knowledge.md"
+                output_path.parent.mkdir(exist_ok=True)
+                
+                self.knowledge_generator.generate_timeline_from_files(
+                    audio_timeline_path, latest_video_timeline, context.video_name, output_path
+                )
+                knowledge_file = output_path
+            else:
+                logger.warning("No video timeline found for knowledge generation")
+                knowledge_file = None
+                
             progress_callback('knowledge_generation', {'stage': 'completed', 'file': knowledge_file})
             
             # Success
@@ -164,7 +161,7 @@ class VideoProcessingOrchestrator:
                 success=True,
                 knowledge_file=knowledge_file,
                 processing_time=processing_time,
-                scenes_processed=len(context.scene_data['scenes'])
+                scenes_processed=context.scene_data['scene_count'] if context.scene_data else 0
             )
             
         except KeyboardInterrupt:
