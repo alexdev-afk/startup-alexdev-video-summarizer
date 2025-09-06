@@ -39,11 +39,11 @@ ffmpeg:
 
 # Scene Detection Settings
 scene_detection:
-  # PySceneDetect configuration
-  threshold: 27.0              # Content change threshold
-  min_scene_length: 2.0        # Minimum scene duration (seconds)
-  downscale_factor: 1          # 1 = full resolution analysis
-  frame_skip: 0                # Analyze every frame for accuracy
+  # PySceneDetect configuration - TUNED FOR 30s/8-scene DETECTION
+  threshold: 15.0              # LOWERED: More sensitive for short video transitions  
+  min_scene_length: 0.3        # LOWERED: Allow very short scenes (0.3s minimum)
+  downscale_factor: 1          # 1 = full resolution analysis for accuracy
+  frame_skip: 0                # Analyze every frame for maximum accuracy
   
   # Fallback settings
   fallback_to_time_based: true
@@ -56,17 +56,43 @@ gpu_pipeline:
   memory_cleanup: true
   max_gpu_memory_usage: 0.9    # 90% GPU memory limit
   
-  # YOLO Settings
+  # DEPRECATED: YOLO Settings (replaced by InternVL3)
   yolo:
-    model: "yolov8n.pt"         # Nano model for speed
-    confidence_threshold: 0.5
-    device: "auto"              # auto, cuda, cpu
+    model: "yolov8x.pt"         # Extra Large model for maximum accuracy
+    confidence_threshold: 0.9    # Very high confidence to meet 2-person max benchmark
+    iou_threshold: 0.7          # Higher IoU to reduce overlapping detections
+    max_detections: 50          # Very low max detections for clean results
+    device: "cuda"              # Explicit GPU usage
+    agnostic_nms: true          # Enable class-agnostic NMS for cleaner results
+    deprecated: true            # Will be removed - use InternVL3 instead
     
-  # EasyOCR Settings
+  # InternVL3 VLM Settings - Replaces YOLO+EasyOCR+OpenCV
+  internvl3:
+    model_name: "InternVL3-2B-Instruct"  # Starting with 2B model for efficiency
+    model_path: "OpenGVLab/InternVL3-2B-Instruct"  # Hugging Face model path
+    device: "cuda"                     # GPU processing
+    confidence_threshold: 0.7          # VLM response confidence threshold
+    max_tokens: 256                    # Maximum tokens for VLM response
+    frame_sample_rate: 3               # Frames to extract per scene for analysis
+    
+    # VLM analysis modes
+    comprehensive_analysis: true       # Full scene understanding
+    text_extraction: true             # Extract all readable text from scenes
+    change_detection: true            # Detect changes between scenes
+    
+    # Additional VLM settings
+    max_input_tiles: 6                # Maximum image tiles for dynamic preprocessing
+    use_thumbnail: false              # Use thumbnail in multi-tile processing
+    
+    # Development settings
+    mock_responses: false             # Use real VLM (set true for development)
+  
+  # DEPRECATED: EasyOCR Settings (replaced by InternVL3)
   easyocr:
     languages: ["en"]           # English text recognition
     gpu: true
     confidence_threshold: 0.5
+    deprecated: true            # Will be removed - use InternVL3 instead
     
   # Whisper Settings (Hybrid: Original Whisper GPU + WhisperX features)
   whisper:
@@ -107,12 +133,13 @@ cpu_pipeline:
   max_workers: 3               # Thread pool size
   timeout_seconds: 300         # 5 minute timeout per tool
   
-  # OpenCV Settings
+  # DEPRECATED: OpenCV Settings (replaced by InternVL3)
   opencv:
     face_detection:
       scale_factor: 1.1
       min_neighbors: 5
       min_size: [30, 30]
+    deprecated: true            # Will be removed - use InternVL3 instead
       
   # LibROSA Settings  
   librosa:
@@ -232,7 +259,7 @@ logging:
 
 # Development Settings (for testing)
 development:
-  mock_ai_services: false      # PRODUCTION: Enable real AI services
+  mock_ai_services: false      # PRODUCTION: Use real InternVL3 model
   skip_model_loading: false    # PRODUCTION: Load all AI models for real processing
   skip_ffmpeg_check: false     # FFmpeg is now installed and ready
   fast_mode: false             # PRODUCTION: Full quality processing

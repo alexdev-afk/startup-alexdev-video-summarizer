@@ -331,9 +331,9 @@ class SceneDetectionService:
         logger.info(f"Scene analysis complete: {len(mock_scenes)} scenes detected (MOCK)")
         return scene_data
     
-    def coordinate_scene_splitting(self, video_path: Path, boundaries: List[Dict], ffmpeg_service=None) -> List[Path]:
+    def coordinate_frame_extraction(self, video_path: Path, boundaries: List[Dict], ffmpeg_service=None) -> Dict[str, Any]:
         """
-        Coordinate with FFmpeg service to create individual scene files
+        Coordinate with FFmpeg service to extract 3 frames per scene instead of full scene videos
         
         Args:
             video_path: Path to video file
@@ -341,28 +341,81 @@ class SceneDetectionService:
             ffmpeg_service: FFmpeg service instance
             
         Returns:
-            List of scene file paths
+            Dictionary containing frame extraction metadata and paths
         """
         if self.mock_mode:
-            return self._mock_scene_files(video_path, boundaries)
+            return self._mock_frame_extraction(video_path, boundaries)
         
         if not ffmpeg_service:
-            logger.warning("No FFmpeg service provided, cannot split scenes")
-            return []
+            logger.warning("No FFmpeg service provided, cannot extract frames")
+            return {}
         
         try:
-            logger.info(f"Coordinating scene splitting: {len(boundaries)} scenes")
-            scene_files = ffmpeg_service.split_by_scenes(video_path, boundaries)
+            logger.info(f"Coordinating frame extraction: 3 frames × {len(boundaries)} scenes = {len(boundaries) * 3} total frames")
+            frame_data = ffmpeg_service.extract_scene_frames(video_path, boundaries)
             
-            logger.info(f"Scene splitting complete: {len(scene_files)} files created")
-            return scene_files
+            total_frames = sum(len(scene_data.get('frames', {})) for scene_data in frame_data.get('scenes', {}).values())
+            logger.info(f"Frame extraction complete: {total_frames} frames created")
+            return frame_data
             
         except Exception as e:
-            logger.error(f"Scene splitting failed: {str(e)}")
-            return []
+            logger.error(f"Frame extraction failed: {str(e)}")
+            return {}
+    
+    def _mock_frame_extraction(self, video_path: Path, boundaries: List[Dict]) -> Dict[str, Any]:
+        """Mock frame extraction for development"""
+        logger.info(f"Mocking frame extraction: 3 frames × {len(boundaries)} scenes")
+        
+        frames_dir = video_path.parent / "frames"
+        
+        frame_data = {
+            "video_file": str(video_path.name),
+            "total_scenes": len(boundaries),
+            "created_at": time.time(),
+            "extraction_method": "3_frames_per_scene",
+            "mock_mode": True,
+            "scenes": {}
+        }
+        
+        for boundary in boundaries:
+            scene_id = boundary['scene_id']
+            start_seconds = boundary['start_seconds']
+            end_seconds = boundary.get('end_seconds', start_seconds + 5.0)
+            duration = end_seconds - start_seconds
+            representative_timestamp = start_seconds + (duration / 2)
+            
+            scene_frames = {
+                "scene_id": scene_id,
+                "start_seconds": start_seconds,
+                "end_seconds": end_seconds,
+                "duration_seconds": duration,
+                "frames": {
+                    "first": {
+                        "timestamp": start_seconds,
+                        "path": str(frames_dir / f"scene_{scene_id:03d}_first.jpg"),
+                        "type": "scene_start",
+                        "mock": True
+                    },
+                    "representative": {
+                        "timestamp": representative_timestamp,
+                        "path": str(frames_dir / f"scene_{scene_id:03d}_representative.jpg"),
+                        "type": "scene_middle",
+                        "mock": True
+                    },
+                    "last": {
+                        "timestamp": end_seconds - 0.1,
+                        "path": str(frames_dir / f"scene_{scene_id:03d}_last.jpg"),
+                        "type": "scene_end",
+                        "mock": True
+                    }
+                }
+            }
+            frame_data["scenes"][f"scene_{scene_id:03d}"] = scene_frames
+        
+        return frame_data
     
     def _mock_scene_files(self, video_path: Path, boundaries: List[Dict]) -> List[Path]:
-        """Mock scene file paths for development"""
+        """Mock scene file paths for development (legacy method)"""
         logger.info(f"Mocking scene file creation: {len(boundaries)} scenes")
         
         scenes_dir = video_path.parent / "scenes"

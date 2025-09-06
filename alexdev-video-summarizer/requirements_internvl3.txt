@@ -1,0 +1,24 @@
+# InternVL3-2B-Instruct Requirements
+# Vision-Language Model for comprehensive scene understanding
+
+# Core dependencies
+torch>=2.0.0
+transformers>=4.37.0
+torchvision>=0.15.0
+Pillow>=9.0.0
+
+# InternVL3 specific dependencies
+accelerate>=0.20.0
+sentencepiece>=0.1.99
+protobuf>=3.20.0
+
+# Flash attention for efficiency (optional but recommended)
+flash-attn>=2.0.0
+
+# Additional vision processing
+opencv-python>=4.8.0
+numpy>=1.21.0
+
+# Hugging Face integration
+datasets>=2.0.0
+huggingface-hub>=0.16.0

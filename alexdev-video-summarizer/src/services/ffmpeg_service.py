@@ -276,6 +276,125 @@ class FFmpegService:
         logger.info(f"Scene splitting complete: {len(scene_files)}/{len(scene_boundaries)} scenes")
         return scene_files
     
+    def extract_scene_frames(self, video_path: Path, scene_boundaries: List[Dict]) -> Dict[str, Any]:
+        """
+        Extract 3 frames per scene (first, representative, last) instead of full scene videos
+        
+        Args:
+            video_path: Path to video file (processed by extract_streams)
+            scene_boundaries: List of scene boundary dictionaries
+            
+        Returns:
+            Dictionary containing frame extraction metadata and paths
+        """
+        logger.info(f"Extracting 3 frames per scene for {len(scene_boundaries)} scenes")
+        
+        # Create frames directory
+        frames_dir = video_path.parent / "frames"
+        frames_dir.mkdir(exist_ok=True)
+        
+        frame_data = {
+            "video_file": str(video_path.name),
+            "total_scenes": len(scene_boundaries),
+            "created_at": time.time(),
+            "extraction_method": "3_frames_per_scene",
+            "scenes": {}
+        }
+        
+        for boundary in scene_boundaries:
+            scene_id = boundary['scene_id']
+            start_seconds = boundary['start_seconds']
+            end_seconds = boundary.get('end_seconds')
+            
+            if not end_seconds:
+                # For last scene without end, use start + 5 seconds as estimate
+                end_seconds = start_seconds + 5.0
+            
+            # Calculate frame timestamps
+            duration = end_seconds - start_seconds
+            representative_timestamp = start_seconds + (duration / 2)
+            
+            # Frame file paths
+            first_frame = frames_dir / f"scene_{scene_id:03d}_first.jpg"
+            representative_frame = frames_dir / f"scene_{scene_id:03d}_representative.jpg"
+            last_frame = frames_dir / f"scene_{scene_id:03d}_last.jpg"
+            
+            scene_frames = {
+                "scene_id": scene_id,
+                "start_seconds": start_seconds,
+                "end_seconds": end_seconds,
+                "duration_seconds": duration,
+                "frames": {
+                    "first": {
+                        "timestamp": start_seconds,
+                        "path": str(first_frame),
+                        "type": "scene_start"
+                    },
+                    "representative": {
+                        "timestamp": representative_timestamp,
+                        "path": str(representative_frame),
+                        "type": "scene_middle"
+                    },
+                    "last": {
+                        "timestamp": end_seconds - 0.1,  # Slightly before end to avoid edge cases
+                        "path": str(last_frame),
+                        "type": "scene_end"
+                    }
+                }
+            }
+            
+            try:
+                # Extract 3 frames for this scene
+                self._extract_single_frame(video_path, first_frame, start_seconds)
+                self._extract_single_frame(video_path, representative_frame, representative_timestamp)
+                self._extract_single_frame(video_path, last_frame, end_seconds - 0.1)
+                
+                frame_data["scenes"][f"scene_{scene_id:03d}"] = scene_frames
+                logger.debug(f"Scene {scene_id}: extracted 3 frames")
+                
+            except Exception as e:
+                logger.error(f"Failed to extract frames for scene {scene_id}: {str(e)}")
+                continue
+        
+        # Save frame metadata JSON file
+        metadata_file = frames_dir / "frame_metadata.json"
+        try:
+            with open(metadata_file, 'w') as f:
+                json.dump(frame_data, f, indent=2)
+            logger.info(f"Frame metadata saved to: {metadata_file}")
+        except Exception as e:
+            logger.warning(f"Failed to save frame metadata: {str(e)}")
+        
+        logger.info(f"Frame extraction complete: {len(frame_data['scenes'])} scenes processed")
+        return frame_data
+    
+    def _extract_single_frame(self, video_path: Path, output_path: Path, timestamp: float):
+        """Extract a single frame at specific timestamp"""
+        cmd = [
+            self.ffmpeg_path, '-y',
+            '-i', str(video_path),
+            '-ss', str(timestamp),
+            '-vframes', '1',  # Extract only 1 frame
+            '-q:v', '2',      # High quality JPEG
+            str(output_path)
+        ]
+        
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=30  # 30 second timeout per frame
+            )
+            
+            if result.returncode != 0:
+                raise FFmpegError(f"Frame extraction failed: {result.stderr}")
+                
+        except subprocess.TimeoutExpired:
+            raise FFmpegError(f"Frame extraction timed out for timestamp {timestamp}")
+        except Exception as e:
+            raise FFmpegError(f"Frame extraction failed: {str(e)}")
+    
     def _extract_scene(self, video_path: Path, scene_file: Path, start_seconds: float, end_seconds: Optional[float]):
         """Extract a single scene from video"""
         cmd = [

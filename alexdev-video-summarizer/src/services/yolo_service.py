@@ -25,6 +25,7 @@ except ImportError:
     CV2_AVAILABLE = False
 
 from utils.logger import get_logger
+from .motion_aware_sampler import MotionAwareSampler
 
 logger = get_logger(__name__)
 
@@ -51,11 +52,16 @@ class YOLOService:
         # Model configuration
         self.model_name = self.yolo_config.get('model', 'yolov8n.pt')
         self.confidence_threshold = self.yolo_config.get('confidence_threshold', 0.5)
+        self.iou_threshold = self.yolo_config.get('iou_threshold', 0.45)
+        self.max_detections = self.yolo_config.get('max_detections', 300)
         self.device = self._determine_device()
         
         # Runtime state
         self.model = None
         self.model_loaded = False
+        
+        # Initialize motion-aware sampler for high-quality keyframe selection
+        self.motion_sampler = MotionAwareSampler(config)
         
         logger.info(f"YOLO service initialized - model: {self.model_name}, device: {self.device}")
     
@@ -89,13 +95,21 @@ class YOLOService:
             
             self.model = YOLO(self.model_name)
             
+            # Configure model parameters optimized for noise reduction
+            self.model.conf = self.confidence_threshold  # Confidence threshold
+            self.model.iou = self.iou_threshold          # IoU threshold for NMS
+            self.model.max_det = self.max_detections     # Maximum detections per image
+            self.model.agnostic_nms = self.yolo_config.get('agnostic_nms', True)  # Enable class-agnostic NMS
+            self.model.half = False                      # Full precision for accuracy
+            self.model.verbose = False                   # Suppress verbose output
+            
             # Move to specified device
             if self.device == 'cuda' and torch.cuda.is_available():
                 self.model.to('cuda')
             
             self.model_loaded = True
             
-            logger.info("YOLO model loaded successfully")
+            logger.info(f"YOLO model loaded successfully - conf: {self.confidence_threshold}, iou: {self.iou_threshold}, max_det: {self.max_detections}, agnostic_nms: {self.model.agnostic_nms}")
             
         except ImportError:
             raise YOLOError(
@@ -165,13 +179,56 @@ class YOLOService:
             raise YOLOError(f"YOLO analysis failed: {str(e)}") from e
     
     def _extract_representative_frames(self, video_path: Path, scene_info: Optional[Dict]):
-        """Extract representative frames for analysis (70x performance optimization)"""
+        """Extract motion-aware keyframes for high-quality analysis"""
         frames = []
         
         # Check if OpenCV is available
         if not CV2_AVAILABLE:
             logger.warning("OpenCV not available for frame extraction")
             return []
+        
+        try:
+            # Use motion-aware sampling if scene info is available
+            if scene_info and 'start_seconds' in scene_info:
+                # Get motion-aware keyframes
+                keyframes = self.motion_sampler.extract_motion_keyframes(video_path, scene_info)
+                
+                if keyframes:
+                    # Extract frames at motion-aware timestamps
+                    cap = cv2.VideoCapture(str(video_path))
+                    if not cap.isOpened():
+                        raise YOLOError(f"Could not open video: {video_path}")
+                    
+                    fps = cap.get(cv2.CAP_PROP_FPS)
+                    if fps <= 0:
+                        fps = 30.0
+                    
+                    for keyframe in keyframes:
+                        frame_time = keyframe['timestamp']
+                        frame_number = int(frame_time * fps)
+                        
+                        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
+                        ret, frame = cap.read()
+                        
+                        if ret:
+                            frames.append((frame_time, frame))
+                    
+                    cap.release()
+                    
+                    logger.debug(f"Extracted {len(frames)} motion-aware keyframes")
+                    return frames
+            
+            # Fallback to temporal sampling for full video or when motion analysis fails
+            return self._fallback_temporal_sampling(video_path, scene_info)
+            
+        except Exception as e:
+            logger.error(f"Motion-aware frame extraction failed: {e}")
+            # Fallback to temporal sampling
+            return self._fallback_temporal_sampling(video_path, scene_info)
+    
+    def _fallback_temporal_sampling(self, video_path: Path, scene_info: Optional[Dict]):
+        """Fallback temporal sampling when motion analysis unavailable"""
+        frames = []
         
         try:
             cap = cv2.VideoCapture(str(video_path))
@@ -187,17 +244,19 @@ class YOLOService:
             if scene_info and 'start_seconds' in scene_info:
                 start_frame = int(scene_info['start_seconds'] * fps)
                 end_frame = int(scene_info.get('end_seconds', duration) * fps)
-                frames_to_sample = min(5, max(1, (end_frame - start_frame) // 10))  # Sample up to 5 frames
-                cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
+                scene_frame_count = end_frame - start_frame
+                frames_to_sample = min(8, max(3, scene_frame_count // 8))  # Increased for better coverage
+                frame_interval = max(1, scene_frame_count // frames_to_sample) if frames_to_sample > 0 else 1
+                frame_start_pos = start_frame
             else:
                 # Full video representative sampling
-                frames_to_sample = min(10, max(3, total_frames // 100))  # Sample up to 10 frames
+                frames_to_sample = min(10, max(3, total_frames // 100))
+                frame_interval = max(1, (total_frames // frames_to_sample) if frames_to_sample > 0 else 1)
+                frame_start_pos = 0
             
             # Extract frames at regular intervals
-            frame_interval = max(1, (total_frames // frames_to_sample) if frames_to_sample > 0 else 1)
-            
             for i in range(frames_to_sample):
-                frame_pos = i * frame_interval
+                frame_pos = frame_start_pos + (i * frame_interval)
                 cap.set(cv2.CAP_PROP_POS_FRAMES, frame_pos)
                 
                 ret, frame = cap.read()
@@ -208,11 +267,10 @@ class YOLOService:
             cap.release()
             
         except Exception as e:
-            logger.error(f"Frame extraction failed: {e}")
-            # Return empty list, will trigger mock mode
+            logger.error(f"Fallback frame extraction failed: {e}")
             return []
         
-        logger.debug(f"Extracted {len(frames)} representative frames")
+        logger.debug(f"Extracted {len(frames)} fallback temporal frames")
         return frames
     
     def _detect_objects_in_frame(self, frame, frame_time: float) -> List[Dict[str, Any]]:

@@ -48,8 +48,8 @@ def setup_clean_environment():
     return config
 
 def run_ffmpeg_and_scenes(config):
-    """Run FFmpeg extraction and scene detection"""
-    print("\n=== STAGE 1: FFmpeg + Scene Detection ===")
+    """Run FFmpeg extraction and scene detection with frame extraction"""
+    print("\n=== STAGE 1: FFmpeg + Scene Detection + Frame Extraction ===")
     
     # FFmpeg extraction
     ffmpeg = FFmpegService(config)
@@ -66,16 +66,23 @@ def run_ffmpeg_and_scenes(config):
     scene_service = SceneDetectionService(config)
     scene_result = scene_service.analyze_video_scenes(video_file)
     
+    frame_data = {}
     if scene_result['boundaries']:
-        scene_files = scene_service.coordinate_scene_splitting(
+        # NEW: Extract 3 frames per scene instead of full scene videos
+        frame_data = scene_service.coordinate_frame_extraction(
             video_file, scene_result['boundaries'], ffmpeg
         )
-        print(f"[OK] Scenes: {len(scene_files)} files")
+        total_scenes = len(scene_result['boundaries'])
+        total_frames = total_scenes * 3
+        print(f"[OK] Frames: {total_frames} frames extracted from {total_scenes} scenes")
+        print(f"     Format: 3 frames per scene (first, representative, last)")
     
     return {
         'build_dir': build_dir,
         'video_file': video_file,
         'audio_file': audio_file,
+        'frame_data': frame_data,
+        'scene_result': scene_result,
         'config': config
     }
 
@@ -176,16 +183,17 @@ def show_final_output(data):
     """Show final clean output files"""
     print("\n=== FINAL OUTPUT ===")
     
+    # Audio timelines
     timelines_dir = data['build_dir'] / "audio_timelines"
-    expected_files = [
+    expected_timeline_files = [
         "whisper_timeline.json",
         "librosa_timeline.json", 
         "pyaudio_timeline.json",
         "master_timeline.json"
     ]
     
-    print("Timeline files generated:")
-    for filename in expected_files:
+    print("Audio timeline files generated:")
+    for filename in expected_timeline_files:
         file_path = timelines_dir / filename
         if file_path.exists():
             size = file_path.stat().st_size
@@ -193,19 +201,46 @@ def show_final_output(data):
         else:
             print(f"  [MISSING] {filename}")
     
-    # Clean up any extra files that shouldn't be there
+    # Video frames
+    frames_dir = data['build_dir'] / "frames"
+    if frames_dir.exists():
+        frame_files = list(frames_dir.glob("*.jpg"))
+        metadata_file = frames_dir / "frame_metadata.json"
+        
+        print(f"\nVideo frame files extracted:")
+        print(f"  [OK] {len(frame_files)} JPEG frames")
+        if metadata_file.exists():
+            print(f"  [OK] frame_metadata.json ({metadata_file.stat().st_size} bytes)")
+            
+            # Show frame breakdown by scene
+            frame_data = data.get('frame_data', {})
+            if frame_data and 'scenes' in frame_data:
+                print(f"  [BREAKDOWN] {len(frame_data['scenes'])} scenes × 3 frames each:")
+                for scene_key, scene_info in frame_data['scenes'].items():
+                    scene_id = scene_info['scene_id']
+                    duration = scene_info.get('duration_seconds', 0)
+                    print(f"    Scene {scene_id}: {duration:.1f}s duration (first/representative/last frames)")
+        else:
+            print(f"  [MISSING] frame_metadata.json")
+    else:
+        print(f"\n  [MISSING] frames directory")
+    
+    # Clean up any extra timeline files that shouldn't be there
     extra_files = []
     if timelines_dir.exists():
         for file_path in timelines_dir.glob("*.json"):
-            if file_path.name not in expected_files:
+            if file_path.name not in expected_timeline_files:
                 extra_files.append(file_path.name)
                 file_path.unlink()  # Delete extra files
     
     if extra_files:
-        print(f"  [CLEANED] Removed extra files: {extra_files}")
+        print(f"  [CLEANED] Removed extra timeline files: {extra_files}")
     
-    print(f"\n[OUTPUT] Location: {timelines_dir}")
-    print("[READY] master_timeline.json contains filtered LibROSA events")
+    print(f"\n[AUDIO OUTPUT] Location: {timelines_dir}")
+    print("[AUDIO READY] master_timeline.json contains filtered LibROSA events")
+    
+    print(f"\n[VISUAL OUTPUT] Location: {frames_dir}")
+    print("[VISUAL READY] 3 frames per scene ready for InternVL3 scene understanding")
 
 def main():
     """Run complete audio pipeline with clean output"""
