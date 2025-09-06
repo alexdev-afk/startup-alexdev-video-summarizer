@@ -477,13 +477,30 @@ class WhisperService:
                 threshold=self.vad_threshold
             )
             
+            logger.info(f"=== Stage 1: Raw VAD Regions ===")
+            logger.info(f"VAD detected {len(speech_timestamps)} speech regions:")
+            for i, ts in enumerate(speech_timestamps):
+                start_sec = ts["start"] / VAD_SR
+                end_sec = ts["end"] / VAD_SR
+                duration = end_sec - start_sec
+                logger.info(f"  Region {i}: {start_sec:.2f}s-{end_sec:.2f}s ({duration:.2f}s)")
+                if i > 0:
+                    gap = ts["start"] - speech_timestamps[i-1]["end"]
+                    gap_sec = gap / VAD_SR
+                    logger.info(f"    Gap from previous: {gap_sec:.2f}s")
             logger.debug(f"Raw VAD detected {len(speech_timestamps)} speech regions")
             
-            # Add padding and remove small gaps (following WhisperWithVAD approach)
+            # Add padding and remove small gaps (adapted for advertisement content)
+            # Reduce tail padding to preserve gaps when using smaller chunk_threshold
+            head_padding = 0.2  # Keep 0.2s head padding
+            tail_padding = min(0.5, self.chunk_threshold * 0.4)  # Adaptive tail: max 0.5s, or 40% of chunk_threshold
+            
+            logger.info(f"Using adaptive padding: head={head_padding}s, tail={tail_padding}s")
+            
             for i, timestamp in enumerate(speech_timestamps):
-                # Add padding: 0.2s head, 1.3s tail
-                timestamp["start"] = max(0, timestamp["start"] - int(0.2 * VAD_SR))
-                timestamp["end"] = min(wav.shape[0] - 16, timestamp["end"] + int(1.3 * VAD_SR))
+                # Add adaptive padding
+                timestamp["start"] = max(0, timestamp["start"] - int(head_padding * VAD_SR))
+                timestamp["end"] = min(wav.shape[0] - 16, timestamp["end"] + int(tail_padding * VAD_SR))
                 
                 # Remove overlaps
                 if i > 0 and timestamp["start"] < speech_timestamps[i - 1]["end"]:
@@ -500,6 +517,15 @@ class WhisperService:
                     vad_chunks.append([])
                 vad_chunks[-1].append(timestamp)
             
+            logger.info(f"=== Stage 2: VAD Chunking ===")
+            logger.info(f"Raw VAD regions: {len(speech_timestamps)}")
+            logger.info(f"Chunk threshold: {self.chunk_threshold}s ({chunk_threshold_samples} samples)")
+            logger.info(f"Grouped into {len(vad_chunks)} chunks:")
+            for i, chunk in enumerate(vad_chunks):
+                start_sec = chunk[0]["start"] / VAD_SR
+                end_sec = chunk[-1]["end"] / VAD_SR  
+                duration = end_sec - start_sec
+                logger.info(f"  Chunk {i}: {start_sec:.2f}s-{end_sec:.2f}s ({duration:.2f}s, {len(chunk)} regions)")
             logger.debug(f"Grouped {len(speech_timestamps)} VAD regions into {len(vad_chunks)} chunks using chunk_threshold={self.chunk_threshold}s")
             
             # Process grouped chunks (each chunk contains multiple VAD regions)
