@@ -61,12 +61,22 @@ gpu_pipeline:
   # RAPID MODEL TESTING: Change model_name and model_path to test different models
   # Model names will automatically appear in filenames, logs, and metadata
   internvl3:
-    model_name: "InternVL3_5-2B"  # Will appear as "InternVL3.5-2B" in logs, "InternVL3-5-2B" in filenames
-    model_path: "OpenGVLab/InternVL3_5-2B"  # Hugging Face model path for downloading/loading
-    device: "cuda"                     # GPU processing
-    confidence_threshold: 0.7          # VLM response confidence threshold
-    max_tokens: 256                    # Maximum tokens for VLM response
-    frame_sample_rate: 3               # Frames to extract per scene for analysis
+    model_name: "InternVL3_5-2B"
+    model_path: "OpenGVLab/InternVL3_5-2B"
+    device: "cuda"
+    confidence_threshold: 0.7
+    max_tokens: 512
+    frame_sample_rate: 3
+    
+    # Generation Configuration - Controls inference behavior
+    generation_config:
+      num_beams: 1
+      max_new_tokens: 512
+      do_sample: false
+      temperature: 0.0
+      repetition_penalty: 1.0
+      max_length: 8192
+      top_p: 0.9
     
     # VLM analysis modes
     comprehensive_analysis: true       # Full scene understanding

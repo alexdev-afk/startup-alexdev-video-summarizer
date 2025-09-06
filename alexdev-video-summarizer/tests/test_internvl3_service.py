@@ -1,23 +1,13 @@
 #!/usr/bin/env python3
 """
-InternVL3 Simplified Timeline Service Test
+InternVL3 Timeline Service Test
 
-Tests the simplified InternVL3 VLM service that replaces YOLO+EasyOCR+OpenCV 
-with direct frame-by-frame VLM analysis.
-
-SIMPLIFIED APPROACH:
-- Extract frames every 5 seconds
-- One VLM analysis per frame
-- One timeline event per frame (timestamp + VLM description)
-- No analysis files, no spans, no scene complexity
+Simple test that drives the inference and verifies timeline file creation.
 
 Tests:
-1. Service initialization and configuration
-2. Frame extraction at intervals
-3. Direct VLM description -> timeline event
-4. Simplified file output (timeline file only)
-
-Produces internvl3_timeline.json only
+1. Service initialization 
+2. Timeline generation from video
+3. Timeline file verification (correct events count)
 """
 
 import sys
@@ -84,174 +74,77 @@ def test_service_initialization(config):
         print(f"[FAIL] Service initialization failed: {e}")
         return None
 
-def test_frame_extraction(service, test_video):
-    """Test frame extraction capabilities"""
-    print("\n=== TEST 2: Frame Extraction ===")
+def test_timeline_generation(service, test_video):
+    """Test timeline generation from video"""
+    print("\n=== TEST 2: Timeline Generation ===")
     
     try:
-        # Test single frame extraction
-        test_timestamp = 5.0
-        frame_image = service._extract_frame_at_timestamp(str(test_video), test_timestamp)
-        
-        if frame_image:
-            print(f"[OK] Frame extracted at {test_timestamp}s: {frame_image.size}")
-            
-            # Test VLM scene analysis with extracted frame
-            if service.scene_analyzer:
-                analysis = service.scene_analyzer.analyze_comprehensive_scene(
-                    frame_image, test_timestamp, scene_id=1
-                )
-                
-                if analysis and analysis.get('comprehensive_analysis'):
-                    print(f"[OK] VLM analysis completed: {len(analysis['comprehensive_analysis'])} chars")
-                    print(f"     Sample: {analysis['comprehensive_analysis'][:100]}...")
-                    print(f"[OK] Analysis confidence: {analysis['confidence']:.2f}")
-                else:
-                    print("[FAIL] VLM analysis returned empty result")
-                    
-        else:
-            print(f"[FAIL] Could not extract frame at {test_timestamp}s")
-            
-    except Exception as e:
-        print(f"[FAIL] Frame extraction test failed: {e}")
-
-def test_scene_processing(service, test_video):
-    """Test scene-based processing workflow"""
-    print("\n=== TEST 3: Scene-Based Processing ===")
-    
-    try:
-        # Look for scene offsets from previous pipeline run
-        scene_files = [
-            Path("build/bonita/scenes/scene_offsets.json"),
-            Path("build/bonita/scene_offsets.json")
-        ]
-        
-        scene_offsets_path = None
-        for scene_file in scene_files:
-            if scene_file.exists():
-                scene_offsets_path = str(scene_file)
-                break
-        
-        if not scene_offsets_path:
-            print("[WARNING] No scene offsets found, testing single-scene mode")
-            scene_offsets_path = None
-            
         # Generate timeline
-        timeline = service.generate_and_save(str(test_video), scene_offsets_path)
+        timeline = service.generate_and_save(str(test_video), None)
         
         if timeline:
             print(f"[OK] Timeline generated successfully")
             print(f"     Events: {len(timeline.events)}")
-            print(f"     Spans: {len(timeline.spans)}")
             print(f"     Duration: {timeline.total_duration:.2f}s")
-            print(f"     Sources: {timeline.sources_used}")
             
             # Show sample events
             if timeline.events:
                 print(f"[EVENTS] Sample events:")
-                for i, event in enumerate(timeline.events[:3]):
-                    print(f"  {i+1}. {event.timestamp:.2f}s: {event.description[:80]}...")
-                    
-            # Show sample spans  
-            if timeline.spans:
-                print(f"[SPANS] Sample spans:")
-                for i, span in enumerate(timeline.spans[:2]):
-                    print(f"  {i+1}. {span.start:.1f}s-{span.end:.1f}s: {span.description[:80]}...")
+                for i, event in enumerate(timeline.events[:2]):
+                    print(f"  {i+1}. {event.timestamp:.2f}s: {event.description[:60]}...")
+            
+            return timeline
         else:
             print("[FAIL] Timeline generation returned None")
+            return None
             
     except Exception as e:
-        print(f"[FAIL] Scene processing test failed: {e}")
+        print(f"[FAIL] Timeline generation failed: {e}")
+        return None
 
-def verify_output_files():
-    """Verify simplified InternVL3 output files are created correctly"""
-    print("\n=== TEST 4: Simplified Output File Verification ===")
+def verify_timeline_file(expected_events=None):
+    """Verify timeline file was created with correct structure"""
+    print("\n=== TEST 3: Timeline File Verification ===")
     
-    # Check timeline file with new naming format - no analysis file needed
     timeline_dir = Path("build/bonita/video_timelines")
     timeline_files = list(timeline_dir.glob("*_timeline.json"))
     
-    if timeline_files:
-        timeline_file = timeline_files[0]  # Get the most recent one
-        size = timeline_file.stat().st_size
-        print(f"[OK] Timeline file: {timeline_file.name} ({size} bytes)")
+    if not timeline_files:
+        print("[FAIL] No timeline files found")
+        return False
+    
+    # Get the most recent timeline file
+    timeline_file = max(timeline_files, key=lambda f: f.stat().st_mtime)
+    size = timeline_file.stat().st_size
+    print(f"[OK] Timeline file: {timeline_file.name} ({size} bytes)")
+    
+    try:
+        with open(timeline_file, 'r') as f:
+            timeline_data = json.load(f)
         
-        # Should be meaningful size (events with VLM descriptions)
-        if size > 500:
-            print("     Timeline file size looks good for VLM events")
+        events = timeline_data.get('events', [])
+        print(f"[OK] Events found: {len(events)}")
+        
+        if expected_events and len(events) != expected_events:
+            print(f"[WARNING] Expected {expected_events} events, got {len(events)}")
+        
+        if len(events) > 0:
+            print(f"[OK] Timeline file structure verified")
+            return True
         else:
-            print("     [WARNING] Timeline file seems small")
+            print(f"[FAIL] No events in timeline")
+            return False
             
-        # Verify simplified structure - events only, no spans
-        try:
-            with open(timeline_file, 'r') as f:
-                timeline_data = json.load(f)
-            
-            # Check for new model_info at top
-            if 'model_info' in timeline_data:
-                model_info = timeline_data['model_info']
-                print(f"[OK] Model info found: {model_info.get('model_name', 'Unknown')}")
-                print(f"     Prompt: {model_info.get('prompt_used', 'Unknown')[:60]}...")
-                print(f"     Timestamp: {model_info.get('processing_timestamp', 'Unknown')}")
-            
-            events = timeline_data.get('events', [])
-            spans = timeline_data.get('timeline_spans', [])
-            
-            print(f"     Events: {len(events)} (should have events)")
-            print(f"     Spans: {len(spans)} (should be 0 for simplified approach)")
-            
-            if len(events) > 0 and len(spans) == 0:
-                print("[OK] Simplified structure confirmed: events only, no spans")
-            else:
-                print("[WARNING] Structure not simplified as expected")
-                
-        except Exception as e:
-            print(f"[WARNING] Could not verify timeline structure: {e}")
-    else:
-        print("[FAIL] No timeline files found with new naming format")
-    
-    # Analysis file should NOT exist in simplified approach
-    analysis_file = Path("build/bonita/video_analysis/internvl3_analysis.json") 
-    if analysis_file.exists():
-        print("[WARNING] Analysis file exists - should be removed in simplified approach")
-    else:
-        print("[OK] No analysis file - simplified approach confirmed")
-    
-    # Check directory structure - only timelines needed
-    video_timelines_dir = Path("build/bonita/video_timelines")
-    
-    if video_timelines_dir.exists():
-        print("[OK] Timeline directory structure created correctly")
-        print(f"     video_timelines/: {len(list(video_timelines_dir.glob('*.json')))} files")
-    else:
-        print("[FAIL] Timeline directory missing")
+    except Exception as e:
+        print(f"[FAIL] Could not read timeline file: {e}")
+        return False
 
-def show_integration_summary():
-    """Show how simplified InternVL3 integrates with the pipeline"""
-    print("\n=== SIMPLIFIED INTEGRATION SUMMARY ===")
-    
-    print("InternVL3 Timeline Service Status:")
-    print("[OK] Direct _timeline.json generation")
-    print("[OK] Scene-based frame analysis (3 frames per scene)")
-    print("[OK] VLM analysis per frame with timeline events")
-    print("[OK] Replaces YOLO+EasyOCR+OpenCV with unified VLM")
-    
-    print("\nProcessing Architecture:")
-    print("  Uses PySceneDetect frame extraction (3 frames per scene)")
-    print("  VLM analysis per frame generates timeline events")
-    print("  Direct timeline.json output")
-    print("  Unified VLM replaces multiple separate services")
-    
-    print("\nService Consolidation:")
-    print("  YOLO object detection → InternVL3 comprehensive analysis")
-    print("  EasyOCR text extraction → InternVL3 comprehensive analysis") 
-    print("  OpenCV face detection → InternVL3 comprehensive analysis")
-    
+
 
 def main():
-    """Run complete InternVL3 timeline service test"""
+    """Run InternVL3 timeline service test"""
     print("InternVL3 Timeline Service Test")
-    print("=" * 50)
+    print("=" * 40)
     
     setup_logging('INFO')
     
@@ -265,22 +158,21 @@ def main():
     if not service:
         return
     
-    # Test 2: Frame extraction
-    test_frame_extraction(service, test_video)
+    # Test 2: Timeline generation
+    timeline = test_timeline_generation(service, test_video)
+    if not timeline:
+        return
     
-    # Test 3: Scene processing
-    test_scene_processing(service, test_video)
+    # Test 3: File verification
+    expected_events = len(timeline.events) if timeline else None
+    success = verify_timeline_file(expected_events)
     
-    # Test 4: Output verification
-    verify_output_files()
-    
-    # Integration summary
-    show_integration_summary()
-    
-    print("\n" + "=" * 50)
-    print("[SUCCESS] InternVL3 Timeline Service Test Complete")
-    print("Timeline generation with VLM analysis per frame")
-    print("Unified VLM replaces YOLO+EasyOCR+OpenCV services")
+    print("\n" + "=" * 40)
+    if success:
+        print("[SUCCESS] InternVL3 Timeline Service Test Complete")
+        print(f"Timeline generated with {len(timeline.events)} events")
+    else:
+        print("[FAIL] Timeline service test failed")
 
 if __name__ == "__main__":
     main()

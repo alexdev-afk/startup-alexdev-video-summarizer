@@ -255,16 +255,12 @@ class InternVL3SceneAnalyzer:
             
             logger.debug(f"Formatted question with image token: {question[:100]}...")
             
-            # Generation config
-            generation_config = {
-                'num_beams': 1,
-                'max_new_tokens': self.max_tokens,
-                'do_sample': False,
-                'temperature': 0.0,
-                'repetition_penalty': 1.0,
-                'max_length': getattr(self.model, 'context_len', 8192),
-                'top_p': 0.9,
-            }
+            # Generation config from YAML configuration
+            generation_config = self.vlm_config.get('generation_config', {}).copy()
+            
+            # Override with dynamic values
+            generation_config['max_new_tokens'] = self.max_tokens
+            generation_config['max_length'] = getattr(self.model, 'context_len', 8192)
             
             logger.debug(f"Generation config: {generation_config}")
             
@@ -705,13 +701,19 @@ class InternVL3TimelineService:
             model_name = self.get_model_name('full')
             model_path = self.vlm_config.get('model_path', model_name)
             
+            # Get the actual generation config used (same as inference)
+            generation_config = self.vlm_config.get('generation_config', {}).copy()
+            generation_config['max_new_tokens'] = self.max_tokens
+            generation_config['max_length'] = getattr(self.model, 'context_len', 8192) if hasattr(self, 'model') and self.model else 8192
+            
             model_info = {
                 'model_name': model_name,
                 'model_path': model_path,
                 'prompt_used': prompt_used,
                 'processing_timestamp': datetime.now().strftime('%Y-%m-%d %H:%M'),
                 'frame_count': len(timeline_dict.get('events', [])),
-                'processing_mode': 'all_frames'  # vs 'representative_only'
+                'processing_mode': 'all_frames',  # vs 'representative_only'
+                'generation_config': generation_config
             }
             
             # Insert model info at the beginning of the JSON
