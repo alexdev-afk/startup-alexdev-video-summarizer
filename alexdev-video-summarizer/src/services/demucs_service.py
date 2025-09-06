@@ -38,19 +38,16 @@ class DemucsService:
             logger.error(f"Input audio file not found for Demucs: {audio_file}")
             raise FileNotFoundError(f"Demucs input audio not found: {audio_file}")
 
-        # Define output directory for Demucs stems
-        demucs_output_dir = context.get_audio_analysis_path("demucs_output")
-        demucs_output_dir.mkdir(parents=True, exist_ok=True)
-
         logger.info(f"Starting audio separation for {audio_file} using htdemucs...")
 
         # Construct the command to run Demucs
-        # We use 'python -m demucs' for reliability
+        # Output directly to build directory with custom filename pattern
         command = [
             sys.executable, '-m', 'demucs',
             '-n', 'htdemucs',
             '--two-stems=vocals',
-            '-o', str(demucs_output_dir),
+            '--filename', '{stem}.{ext}',  # Output directly as vocals.wav and no_vocals.wav
+            '-o', str(context.build_directory),
             str(audio_file)
         ]
 
@@ -66,16 +63,32 @@ class DemucsService:
             logger.info("Demucs process completed successfully.")
             logger.debug(f"Demucs stdout: {process.stdout}")
 
-            # Define the expected output paths
-            # Demucs creates a subdirectory named after the model
-            model_output_dir = demucs_output_dir / 'htdemucs' / context.video_name
-            vocals_path = model_output_dir / 'vocals.wav'
-            no_vocals_path = model_output_dir / 'no_vocals.wav'
+            # Define the expected output paths from Demucs
+            # Demucs creates: build/{video_name}/htdemucs/vocals.wav and no_vocals.wav
+            model_output_dir = context.build_directory / 'htdemucs'
+            temp_vocals_path = model_output_dir / 'vocals.wav'
+            temp_no_vocals_path = model_output_dir / 'no_vocals.wav'
 
-            if not vocals_path.exists() or not no_vocals_path.exists():
+            if not temp_vocals_path.exists() or not temp_no_vocals_path.exists():
                 logger.error(f"Demucs did not produce the expected output files.")
                 logger.error(f"Looked in: {model_output_dir}")
+                logger.error(f"Expected: {temp_vocals_path} and {temp_no_vocals_path}")
+                # List what's actually there for debugging
+                if model_output_dir.exists():
+                    files = list(model_output_dir.glob("*"))
+                    logger.error(f"Found files: {files}")
                 raise FileNotFoundError("Demucs output files not found after processing.")
+
+            # Move files to build/{video_name}/ for easy access
+            vocals_path = context.build_directory / 'vocals.wav'
+            no_vocals_path = context.build_directory / 'no_vocals.wav'
+            
+            import shutil
+            shutil.move(str(temp_vocals_path), str(vocals_path))
+            shutil.move(str(temp_no_vocals_path), str(no_vocals_path))
+            
+            # Clean up htdemucs directory
+            shutil.rmtree(context.build_directory / 'htdemucs', ignore_errors=True)
 
             logger.info(f"Vocals stem saved to: {vocals_path}")
             logger.info(f"Instrumental stem saved to: {no_vocals_path}")

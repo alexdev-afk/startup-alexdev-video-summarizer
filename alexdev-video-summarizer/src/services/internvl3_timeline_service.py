@@ -353,15 +353,14 @@ class InternVL3TimelineService:
         self.max_tokens = self.vlm_config.get('max_tokens', 256)
         self.frame_sample_rate = self.vlm_config.get('frame_sample_rate', 3)  # frames per scene
         
-        # Initialize VLM components
+        # Initialize VLM components (lazy loading)
         self.model = None
         self.tokenizer = None
         self.scene_analyzer = None
+        self._model_loaded = False
         
-        # Try to initialize VLM
-        self._initialize_vlm()
-        
-        logger.info("InternVL3 timeline service initialized for comprehensive scene understanding")
+        # Skip model loading during init - load on-demand when needed
+        logger.info("InternVL3 timeline service initialized (model will load on-demand)")
     
     def _validate_model_config(self):
         """Validate required model configuration for rapid model testing"""
@@ -409,6 +408,15 @@ class InternVL3TimelineService:
         else:
             return model_name
     
+    def _ensure_model_loaded(self):
+        """Ensure model is loaded before processing (lazy loading)"""
+        if self._model_loaded:
+            return
+        
+        logger.info("Loading InternVL3 model on-demand...")
+        self._initialize_vlm()
+        self._model_loaded = True
+
     def _initialize_vlm(self):
         """Initialize InternVL3 model and processor"""
         try:
@@ -487,6 +495,9 @@ class InternVL3TimelineService:
             EnhancedTimeline with VLM events (no spans, no analysis file)
         """
         start_time = time.time()
+        
+        # Ensure model is loaded before processing (lazy loading)
+        self._ensure_model_loaded()
         
         try:
             # Get video duration
@@ -756,3 +767,34 @@ class InternVL3TimelineService:
         ))
         
         return timeline
+    
+    def unload_model(self):
+        """Unload InternVL3 model to free VRAM"""
+        if self._model_loaded and self.model is not None:
+            try:
+                logger.info("Unloading InternVL3 model to free VRAM...")
+                
+                # Clear model and tokenizer
+                del self.model
+                del self.tokenizer
+                if self.scene_analyzer:
+                    del self.scene_analyzer
+                
+                # Reset state
+                self.model = None
+                self.tokenizer = None
+                self.scene_analyzer = None
+                self._model_loaded = False
+                
+                # Clear GPU cache
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                
+                logger.info("InternVL3 model unloaded successfully")
+                
+            except Exception as e:
+                logger.warning(f"Error during InternVL3 model cleanup: {e}")
+                
+    def cleanup(self):
+        """Public cleanup method"""
+        self.unload_model()

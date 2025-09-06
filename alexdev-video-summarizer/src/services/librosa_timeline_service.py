@@ -65,7 +65,7 @@ class LibROSATimelineService:
         
         logger.info(f"LibROSA timeline service initialized - sample_rate: {self.sample_rate}, event_detection: enabled, available: {LIBROSA_AVAILABLE}")
     
-    def generate_and_save(self, audio_path: str) -> EnhancedTimeline:
+    def generate_and_save(self, audio_path: str, source_tag: Optional[str] = None, optimization: Optional[Dict] = None) -> EnhancedTimeline:
         """
         Generate enhanced timeline and save intermediate files
         
@@ -90,8 +90,8 @@ class LibROSATimelineService:
                 total_duration=total_duration
             )
             
-            # Add LibROSA to sources used
-            timeline.sources_used.append("librosa")
+            # Add source tag to sources used
+            timeline.sources_used.append(source_tag if source_tag else "librosa")
             
             # Add processing notes with analysis details
             timeline.processing_notes.append(f"LibROSA music analysis - sample_rate: {self.sample_rate}, analysis_window: {self.analysis_window}")
@@ -105,10 +105,10 @@ class LibROSATimelineService:
             logger.info(f"LibROSA enhanced timeline generated: {len(timeline.events)} events, {len(timeline.spans)} spans in {processing_time:.2f}s")
             
             # Save intermediate analysis files before cleanup
-            self._save_intermediate_analysis(timeline, audio_path, audio_data)
+            self._save_intermediate_analysis(timeline, audio_path, audio_data, source_tag)
             
             # Save timeline to audio_timelines directory
-            self._save_enhanced_timeline(timeline, audio_path)
+            self._save_enhanced_timeline(timeline, audio_path, source_tag)
             
             # Cleanup large audio data from memory after all processing
             del audio_data
@@ -154,7 +154,7 @@ class LibROSATimelineService:
             logger.info(f"LibROSA timeline generated: {len(timeline.events)} events, {len(timeline.spans)} spans in {processing_time:.2f}s")
             
             # Save timeline to file
-            self._save_timeline(timeline, audio_path)
+            self._save_timeline(timeline, audio_path, source_tag)
             
             # Cleanup large audio data from memory after all processing
             del audio_data
@@ -1028,7 +1028,7 @@ class LibROSATimelineService:
         logger.warning(f"Using fallback LibROSA timeline: {error or 'LibROSA unavailable'}")
         return timeline
     
-    def _save_timeline(self, timeline: ServiceTimeline, audio_path: str):
+    def _save_timeline(self, timeline: ServiceTimeline, audio_path: str, source_tag: Optional[str] = None):
         """Save timeline to file"""
         try:
             # Determine output path
@@ -1037,7 +1037,8 @@ class LibROSATimelineService:
             timeline_dir = build_dir / "audio_timelines"
             timeline_dir.mkdir(exist_ok=True)
             
-            output_file = timeline_dir / "librosa_timeline.json"
+            timeline_filename = f"{source_tag or 'librosa'}_timeline.json"
+            output_file = timeline_dir / timeline_filename
             timeline.save_to_file(str(output_file))
             
             logger.info(f"LibROSA timeline saved to: {output_file}")
@@ -1076,7 +1077,7 @@ class LibROSATimelineService:
         logger.warning(f"Using fallback LibROSA enhanced timeline: {error or 'LibROSA unavailable'}")
         return timeline
     
-    def _save_intermediate_analysis(self, timeline: EnhancedTimeline, audio_path: str, audio_data: np.ndarray):
+    def _save_intermediate_analysis(self, timeline: EnhancedTimeline, audio_path: str, audio_data: np.ndarray, source_tag: Optional[str] = None):
         """Save intermediate analysis files to audio_analysis directory"""
         try:
             # Determine output path
@@ -1107,13 +1108,35 @@ class LibROSATimelineService:
                         "structural_change": self.structural_change_threshold
                     }
                 },
-                "detected_events": len(timeline.events),
-                "detected_spans": len(timeline.spans),
+                "detected_events_count": len(timeline.events),
+                "detected_spans_count": len(timeline.spans),
                 "transcript_length": len(timeline.full_transcript),
-                "speakers": timeline.speakers
+                "speakers": timeline.speakers,
+                "complete_events_data": [
+                    {
+                        "timestamp": event.timestamp,
+                        "description": event.description,
+                        "event_type": event.description.lower().replace(" ", "_"),
+                        "source": event.source,
+                        "confidence": event.confidence,
+                        "details": event.details
+                    } for event in timeline.events
+                ],
+                "complete_spans_data": [
+                    {
+                        "start": span.start,
+                        "end": span.end,
+                        "description": span.description,
+                        "source": span.source,
+                        "confidence": span.confidence,
+                        "details": span.details,
+                        "events_count": len(span.events)
+                    } for span in timeline.spans
+                ]
             }
             
-            output_file = analysis_dir / "librosa_analysis.json"
+            analysis_filename = f"{source_tag or 'librosa'}_analysis.json"
+            output_file = analysis_dir / analysis_filename
             
             import json
             with open(output_file, 'w') as f:
@@ -1124,7 +1147,7 @@ class LibROSATimelineService:
         except Exception as e:
             logger.error(f"Failed to save LibROSA intermediate analysis: {e}")
     
-    def _save_enhanced_timeline(self, timeline: EnhancedTimeline, audio_path: str):
+    def _save_enhanced_timeline(self, timeline: EnhancedTimeline, audio_path: str, source_tag: Optional[str] = None):
         """Save enhanced timeline to audio_timelines directory"""
         try:
             # Determine output path
@@ -1133,7 +1156,8 @@ class LibROSATimelineService:
             timeline_dir = build_dir / "audio_timelines"
             timeline_dir.mkdir(exist_ok=True)
             
-            output_file = timeline_dir / "librosa_timeline.json"
+            timeline_filename = f"{source_tag or 'librosa'}_timeline.json"
+            output_file = timeline_dir / timeline_filename
             timeline.save_to_file(str(output_file))
             
             logger.info(f"LibROSA enhanced timeline saved to: {output_file}")

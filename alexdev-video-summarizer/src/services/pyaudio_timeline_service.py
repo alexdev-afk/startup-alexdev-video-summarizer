@@ -79,7 +79,7 @@ class PyAudioTimelineService:
         
         logger.info(f"pyAudioAnalysis timeline service initialized - window: {self.window_size}s, event_detection: enabled, available: {PYAUDIOANALYSIS_AVAILABLE}")
     
-    def generate_and_save(self, audio_path: str) -> EnhancedTimeline:
+    def generate_and_save(self, audio_path: str, source_tag: Optional[str] = None, optimization: Optional[Dict] = None) -> EnhancedTimeline:
         """
         Generate enhanced timeline and save intermediate files
         
@@ -104,8 +104,8 @@ class PyAudioTimelineService:
                 total_duration=total_duration
             )
             
-            # Add pyAudio to sources used
-            timeline.sources_used.append("pyaudio")
+            # Add source tag to sources used
+            timeline.sources_used.append(source_tag if source_tag else "pyaudio")
             
             # Add processing notes with analysis details
             timeline.processing_notes.append(f"pyAudioAnalysis speech/sound analysis - sample_rate: {sample_rate}")
@@ -121,10 +121,10 @@ class PyAudioTimelineService:
             logger.info(f"pyAudioAnalysis enhanced timeline generated: {len(timeline.events)} events, {len(timeline.spans)} spans in {processing_time:.2f}s")
             
             # Save intermediate analysis files
-            self._save_intermediate_analysis(timeline, audio_path, audio_data, sample_rate)
+            self._save_intermediate_analysis(timeline, audio_path, audio_data, sample_rate, source_tag)
             
             # Save timeline to audio_timelines directory
-            self._save_enhanced_timeline(timeline, audio_path)
+            self._save_enhanced_timeline(timeline, audio_path, source_tag)
             
             # Cleanup large audio data from memory after all processing
             del audio_data
@@ -172,7 +172,7 @@ class PyAudioTimelineService:
             logger.info(f"pyAudioAnalysis timeline generated: {len(timeline.events)} events, {len(timeline.spans)} spans in {processing_time:.2f}s")
             
             # Save timeline to file
-            self._save_timeline(timeline, audio_path)
+            self._save_timeline(timeline, audio_path, source_tag)
             
             # Cleanup large audio data from memory after all processing
             del audio_data
@@ -703,9 +703,15 @@ class PyAudioTimelineService:
         
         try:
             # Extract features for event classification
-            features = aF.feature_extraction(audio_data, sample_rate, 
-                                           int(self.window_size * sample_rate), 
-                                           int(self.step_size * sample_rate))
+            result = aF.feature_extraction(audio_data, sample_rate, 
+                                          int(self.window_size * sample_rate), 
+                                          int(self.step_size * sample_rate))
+            
+            # Handle both tuple (features, feature_names) and array return types
+            if isinstance(result, tuple):
+                features = result[0]  # Extract features array from tuple
+            else:
+                features = result
             
             if features.size == 0:
                 return 'background', 0.5
@@ -891,9 +897,15 @@ class PyAudioTimelineService:
         
         try:
             # Extract features for event classification
-            features = aF.feature_extraction(audio_data, sample_rate, 
-                                           int(self.window_size * sample_rate), 
-                                           int(self.step_size * sample_rate))
+            result = aF.feature_extraction(audio_data, sample_rate, 
+                                          int(self.window_size * sample_rate), 
+                                          int(self.step_size * sample_rate))
+            
+            # Handle both tuple (features, feature_names) and array return types
+            if isinstance(result, tuple):
+                features = result[0]  # Extract features array from tuple
+            else:
+                features = result
             
             if features.size == 0:
                 return 'background'
@@ -965,9 +977,15 @@ class PyAudioTimelineService:
         """
         try:
             # Extract features for genre classification
-            features = aF.feature_extraction(audio_data, sample_rate, 
-                                           int(self.window_size * sample_rate), 
-                                           int(self.step_size * sample_rate))
+            result = aF.feature_extraction(audio_data, sample_rate, 
+                                          int(self.window_size * sample_rate), 
+                                          int(self.step_size * sample_rate))
+            
+            # Handle both tuple (features, feature_names) and array return types
+            if isinstance(result, tuple):
+                features = result[0]  # Extract features array from tuple
+            else:
+                features = result
             
             if features.size == 0:
                 return 'unknown', 0.5
@@ -1226,7 +1244,7 @@ class PyAudioTimelineService:
         logger.warning(f"Using fallback pyAudioAnalysis timeline: {error or 'pyAudioAnalysis unavailable'}")
         return timeline
     
-    def _save_timeline(self, timeline: ServiceTimeline, audio_path: str):
+    def _save_timeline(self, timeline: ServiceTimeline, audio_path: str, source_tag: Optional[str] = None):
         """Save timeline to file"""
         try:
             # Determine output path
@@ -1235,7 +1253,8 @@ class PyAudioTimelineService:
             timeline_dir = build_dir / "audio_timelines"
             timeline_dir.mkdir(exist_ok=True)
             
-            output_file = timeline_dir / "pyaudio_timeline.json"
+            timeline_filename = f"{source_tag or 'pyaudio'}_timeline.json"
+            output_file = timeline_dir / timeline_filename
             timeline.save_to_file(str(output_file))
             
             logger.info(f"pyAudioAnalysis timeline saved to: {output_file}")
@@ -1277,7 +1296,7 @@ class PyAudioTimelineService:
         logger.warning(f"Using fallback pyAudioAnalysis enhanced timeline: {error or 'pyAudioAnalysis unavailable'}")
         return timeline
     
-    def _save_intermediate_analysis(self, timeline: EnhancedTimeline, audio_path: str, audio_data: np.ndarray, sample_rate: int):
+    def _save_intermediate_analysis(self, timeline: EnhancedTimeline, audio_path: str, audio_data: np.ndarray, sample_rate: int, source_tag: Optional[str] = None):
         """Save intermediate analysis files to audio_analysis directory"""
         try:
             # Determine output path
@@ -1310,13 +1329,35 @@ class PyAudioTimelineService:
                         "genre_confidence": self.genre_confidence_threshold
                     }
                 },
-                "detected_events": len(timeline.events),
-                "detected_spans": len(timeline.spans),
+                "detected_events_count": len(timeline.events),
+                "detected_spans_count": len(timeline.spans),
                 "transcript_length": len(timeline.full_transcript),
-                "speakers": timeline.speakers
+                "speakers": timeline.speakers,
+                "complete_events_data": [
+                    {
+                        "timestamp": event.timestamp,
+                        "description": event.description,
+                        "event_type": event.description.lower().replace(" ", "_"),
+                        "source": event.source,
+                        "confidence": event.confidence,
+                        "details": event.details
+                    } for event in timeline.events
+                ],
+                "complete_spans_data": [
+                    {
+                        "start": span.start,
+                        "end": span.end,
+                        "description": span.description,
+                        "source": span.source,
+                        "confidence": span.confidence,
+                        "details": span.details,
+                        "events_count": len(span.events)
+                    } for span in timeline.spans
+                ]
             }
             
-            output_file = analysis_dir / "pyaudio_analysis.json"
+            analysis_filename = f"{source_tag or 'pyaudio'}_analysis.json"
+            output_file = analysis_dir / analysis_filename
             
             import json
             with open(output_file, 'w') as f:
@@ -1327,7 +1368,7 @@ class PyAudioTimelineService:
         except Exception as e:
             logger.error(f"Failed to save pyAudioAnalysis intermediate analysis: {e}")
     
-    def _save_enhanced_timeline(self, timeline: EnhancedTimeline, audio_path: str):
+    def _save_enhanced_timeline(self, timeline: EnhancedTimeline, audio_path: str, source_tag: Optional[str] = None):
         """Save enhanced timeline to audio_timelines directory"""
         try:
             # Determine output path
@@ -1336,7 +1377,8 @@ class PyAudioTimelineService:
             timeline_dir = build_dir / "audio_timelines"
             timeline_dir.mkdir(exist_ok=True)
             
-            output_file = timeline_dir / "pyaudio_timeline.json"
+            timeline_filename = f"{source_tag or 'pyaudio'}_timeline.json"
+            output_file = timeline_dir / timeline_filename
             timeline.save_to_file(str(output_file))
             
             logger.info(f"pyAudioAnalysis enhanced timeline saved to: {output_file}")

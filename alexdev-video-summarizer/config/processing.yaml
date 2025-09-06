@@ -1,5 +1,6 @@
 # alexdev-video-summarizer Configuration
 # Scene-based institutional knowledge extraction settings
+# DEMUCS OPTIMIZATION: With clean audio separation, each service focuses only on its expertise
 
 # Application Settings
 app:
@@ -246,6 +247,31 @@ logging:
     gpu_pipeline: "INFO"
     cpu_pipeline: "INFO"
     knowledge_generator: "INFO"
+
+# DEMUCS OPTIMIZATION: Service-Specific Analysis Focus
+audio_optimization:
+  # LibROSA on no_vocals.wav - Full music analysis (everything on)
+  librosa_music:
+    analyze_tempo_changes: true        # Essential for music
+    analyze_harmonic_shifts: true      # Essential for music  
+    analyze_energy_transitions: true   # Keep - valuable for music dynamics
+    analyze_onset_events: true         # Keep - valuable for music analysis
+    analyze_structural_segments: true  # Essential for music structure
+    
+  # PyAudio on vocals.wav - Focus on speech only  
+  pyaudio_voice:
+    analyze_speaker_changes: true     # Essential for speech
+    analyze_emotion_changes: true     # Valuable for voice analysis
+    analyze_sound_effects: false     # Skip - no sound effects in clean vocals
+    analyze_music_features: false    # Skip - vocals track has no music
+    
+  # PyAudio on no_vocals.wav - Focus on sound effects, music features, and genre
+  pyaudio_music:
+    analyze_speaker_changes: false   # Skip - no speakers in music track
+    analyze_emotion_changes: false   # Skip - not applicable to music
+    analyze_sound_effects: true      # Keep - valuable for institutional knowledge
+    analyze_music_features: true     # Essential for music classification
+    analyze_genre_classification: true # Valuable for institutional categorization
 
 # Development Settings (for testing)
 development:

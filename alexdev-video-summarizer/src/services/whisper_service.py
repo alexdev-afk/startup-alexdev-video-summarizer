@@ -57,7 +57,19 @@ except ImportError:
         return None, None
 
 from utils.logger import get_logger
-from .whisper_vad_chunking import AdvancedVADChunking
+
+# Optional VAD chunking import for development
+try:
+    from .whisper_vad_chunking import AdvancedVADChunking
+    VAD_CHUNKING_AVAILABLE = True
+except ImportError:
+    VAD_CHUNKING_AVAILABLE = False
+    class AdvancedVADChunking:
+        """Fallback VAD chunking for development"""
+        def __init__(self, *args, **kwargs):
+            pass
+        def chunk_audio_with_vad(self, *args, **kwargs):
+            return []
 
 logger = get_logger(__name__)
 
@@ -437,8 +449,7 @@ class WhisperService:
             logger.info(f"Sequential transcription complete: {processing_time:.2f}s, "
                        f"{len(vad_segments)} VAD chunks -> {len(reconstructed_segments)} final segments")
             
-            # Save analysis to intermediate file
-            self._save_analysis_to_file(audio_path, processed_result)
+            # Skip saving duplicate transcription file - enhanced service handles analysis
             
             return processed_result
             
@@ -1284,8 +1295,7 @@ class WhisperService:
             'mock_mode': True
         }
         
-        # Save mock analysis to intermediate file
-        self._save_analysis_to_file(audio_path, mock_result)
+        # Skip saving duplicate transcription file - enhanced service handles analysis
         
         return mock_result
     

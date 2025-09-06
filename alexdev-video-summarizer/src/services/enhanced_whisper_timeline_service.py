@@ -49,7 +49,7 @@ class EnhancedWhisperTimelineService:
     
     def generate_timeline(self, audio_path: Path, scene_info: Optional[Dict] = None) -> EnhancedTimeline:
         """
-        Generate clean hierarchical timeline from audio file
+        Generate clean hierarchical timeline from audio file (for backward compatibility)
         
         Args:
             audio_path: Path to audio.wav file
@@ -61,6 +61,11 @@ class EnhancedWhisperTimelineService:
         Raises:
             WhisperError: If transcription fails
         """
+        # Delegate to generate_and_save without saving
+        return self._generate_timeline_internal(audio_path, scene_info)
+    
+    def _generate_timeline_internal(self, audio_path: Path, scene_info: Optional[Dict] = None) -> EnhancedTimeline:
+        """Internal method for timeline generation"""
         audio_path = Path(audio_path) if isinstance(audio_path, str) else audio_path
         logger.info(f"Generating enhanced Whisper timeline: {audio_path.name}")
         
@@ -68,45 +73,49 @@ class EnhancedWhisperTimelineService:
             # Get transcription from WhisperService
             whisper_result = self.whisper_service.transcribe_audio(audio_path, scene_info)
             
-            # Save intermediate analysis file for auditing
-            self._save_intermediate_analysis(Path(audio_path), whisper_result)
+            # Create enhanced timeline first
+            timeline = self._create_enhanced_timeline(whisper_result, audio_path)
             
-            # Extract global data
-            total_duration = self._extract_duration(whisper_result)
-            full_transcript = whisper_result.get('transcript', '')
-            speakers = whisper_result.get('speakers', [])
-            language = whisper_result.get('language', 'auto-detected')
-            language_confidence = whisper_result.get('language_probability', None)
-            
-            # Create enhanced timeline
-            timeline = EnhancedTimeline(
-                audio_file=audio_path.name,
-                total_duration=total_duration
-            )
-            
-            # Set global data
-            timeline.set_global_data(
-                transcript=full_transcript,
-                speakers=speakers,
-                language=language,
-                language_confidence=language_confidence
-            )
-            
-            # Convert segments to speech spans (Whisper's expertise)
-            segments = whisper_result.get('segments', [])
-            self._add_speech_spans(timeline, segments)
-            
-            # Add processing notes for auditing
-            timeline.add_processing_note(f"Processed {len(segments)} Whisper segments from VAD regions")
-            timeline.add_processing_note(f"VAD reconstruction: {len(timeline.spans)} timeline spans (1:1 with VAD regions)")
-            timeline.add_processing_note(f"Using WhisperWithVAD approach for optimal transcription quality")
-            
-            logger.info(f"Enhanced timeline complete: {len(timeline.spans)} spans, {sum(len(s.events) for s in timeline.spans)} events")
             return timeline
             
         except Exception as e:
             logger.error(f"Enhanced timeline generation failed: {e}")
-            raise WhisperError(f"EnhancedWhisperTimelineService failed: {str(e)}") from e
+            raise WhisperError(f"Enhanced timeline generation failed: {str(e)}") from e
+    
+    def _create_enhanced_timeline(self, whisper_result: Dict[str, Any], audio_path: Path) -> EnhancedTimeline:
+        """Create enhanced timeline from whisper result"""
+        # Extract global data
+        total_duration = self._extract_duration(whisper_result)
+        full_transcript = whisper_result.get('transcript', '')
+        speakers = whisper_result.get('speakers', [])
+        language = whisper_result.get('language', 'auto-detected')
+        language_confidence = whisper_result.get('language_probability', None)
+        
+        # Create enhanced timeline
+        timeline = EnhancedTimeline(
+            audio_file=audio_path.name,
+            total_duration=total_duration
+        )
+        
+        # Set global data
+        timeline.set_global_data(
+            transcript=full_transcript,
+            speakers=speakers,
+            language=language,
+            language_confidence=language_confidence
+        )
+        
+        # Convert segments to speech spans (Whisper's expertise)
+        segments = whisper_result.get('segments', [])
+        self._add_speech_spans(timeline, segments)
+        
+        # Add processing notes for auditing
+        timeline.add_processing_note(f"Processed {len(segments)} Whisper segments from VAD regions")
+        timeline.add_processing_note(f"VAD reconstruction: {len(timeline.spans)} timeline spans (1:1 with VAD regions)")
+        timeline.add_processing_note(f"Using WhisperWithVAD approach for optimal transcription quality")
+        
+        logger.info(f"Enhanced timeline complete: {len(timeline.spans)} spans, {sum(len(s.events) for s in timeline.spans)} events")
+        return timeline
     
     def _extract_duration(self, whisper_result: Dict[str, Any]) -> float:
         """Extract total duration from whisper result"""
@@ -258,7 +267,7 @@ class EnhancedWhisperTimelineService:
                 logger.debug(f"Word event outside span range: {e}")
                 continue
     
-    def _save_intermediate_analysis(self, audio_path: Path, whisper_result: Dict[str, Any]):
+    def _save_intermediate_analysis(self, audio_path: Path, whisper_result: Dict[str, Any], timeline: Optional[EnhancedTimeline] = None, source_tag: Optional[str] = None):
         """Save intermediate Whisper analysis for auditing"""
         try:
             # Save in audio_analysis directory for raw analysis data
@@ -280,8 +289,35 @@ class EnhancedWhisperTimelineService:
                 }
             }
             
-            # Save raw analysis
-            analysis_file = analysis_dir / "whisper_analysis.json" 
+            # Add timeline event data if available for auditing
+            if timeline:
+                analysis_with_metadata.update({
+                    'generated_timeline_events': [
+                        {
+                            "timestamp": event.timestamp,
+                            "description": event.description,
+                            "event_type": event.description.lower().replace(" ", "_"),
+                            "source": event.source,
+                            "confidence": event.confidence,
+                            "details": event.details
+                        } for event in timeline.events
+                    ],
+                    'generated_timeline_spans': [
+                        {
+                            "start": span.start,
+                            "end": span.end,
+                            "description": span.description,
+                            "source": span.source,
+                            "confidence": span.confidence,
+                            "details": span.details,
+                            "events_count": len(span.events)
+                        } for span in timeline.spans
+                    ]
+                })
+            
+            # Save raw analysis with source tag
+            analysis_filename = f"{source_tag or 'whisper'}_analysis.json"
+            analysis_file = analysis_dir / analysis_filename 
             with open(analysis_file, 'w', encoding='utf-8') as f:
                 json.dump(analysis_with_metadata, f, indent=2, ensure_ascii=False)
             
@@ -291,21 +327,44 @@ class EnhancedWhisperTimelineService:
             logger.error(f"Failed to save intermediate analysis: {e}")
             # Don't raise - this is supplementary
     
-    def generate_and_save(self, audio_path: Path, scene_info: Optional[Dict] = None) -> EnhancedTimeline:
+    def generate_and_save(self, audio_path: Path, scene_info: Optional[Dict] = None, source_tag: Optional[str] = None) -> EnhancedTimeline:
         """Generate timeline and save to proper directories"""
-        timeline = self.generate_timeline(audio_path, scene_info)
+        audio_path = Path(audio_path) if isinstance(audio_path, str) else audio_path
+        logger.info(f"Generating enhanced Whisper timeline: {audio_path.name}")
+        
+        try:
+            # Get transcription from WhisperService
+            whisper_result = self.whisper_service.transcribe_audio(audio_path, scene_info)
+            
+            # Create enhanced timeline
+            timeline = self._create_enhanced_timeline(whisper_result, audio_path)
+            
+            # Save intermediate analysis file for auditing with timeline data
+            self._save_intermediate_analysis(Path(audio_path), whisper_result, timeline, source_tag)
+            
+        except Exception as e:
+            logger.error(f"Enhanced timeline generation failed: {e}")
+            raise WhisperError(f"Enhanced timeline generation failed: {str(e)}") from e
+        
+        # Apply source tag if provided
+        if source_tag:
+            # Replace default "whisper" with the specific tag
+            if "whisper" in timeline.sources_used:
+                timeline.sources_used = [source_tag] + [s for s in timeline.sources_used if s != "whisper"]
+            else:
+                timeline.sources_used.append(source_tag)
         
         # Create directory structure
         build_dir = Path(audio_path).parent
         timelines_dir = build_dir / "audio_timelines"
         timelines_dir.mkdir(exist_ok=True)
         
-        # Save main enhanced timeline
-        main_timeline_path = timelines_dir / "whisper_timeline.json"
+        # Save main enhanced timeline with source tag
+        timeline_filename = f"{source_tag or 'whisper'}_timeline.json"
+        main_timeline_path = timelines_dir / timeline_filename
         timeline.save_to_file(str(main_timeline_path))
         
-        # Save intermediate files for auditing
-        timeline.save_intermediate_files(timelines_dir)
+        # Skip redundant enhanced_timeline.json - main timeline file is sufficient
         
         logger.info(f"Enhanced timeline saved: {main_timeline_path}")
         logger.info(f"Intermediate files saved in: {timelines_dir}")

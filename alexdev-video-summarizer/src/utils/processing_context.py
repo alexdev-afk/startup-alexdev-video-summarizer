@@ -21,7 +21,9 @@ class VideoProcessingContext:
     
     video_path: Path
     audio_path: Optional[Path] = None
-    video_path: Optional[Path] = None
+    processed_video_path: Optional[Path] = None
+    vocals_path: Optional[Path] = None
+    no_vocals_path: Optional[Path] = None
     scene_data: Optional[Dict[str, Any]] = None
     build_directory: Optional[Path] = None
     scene_analysis: Dict[str, Any] = field(default_factory=dict)
@@ -51,8 +53,8 @@ class VideoProcessingContext:
             logger.error(f"Audio file missing: {self.audio_path}")
             return False
             
-        if not self.video_path or not self.video_path.exists():
-            logger.error(f"Video file missing: {self.video_path}")
+        if not self.processed_video_path or not self.processed_video_path.exists():
+            logger.error(f"Video file missing: {self.processed_video_path}")
             return False
             
         # Check file sizes
@@ -60,8 +62,8 @@ class VideoProcessingContext:
             logger.error(f"Audio file too small: {self.audio_path}")
             return False
             
-        if self.video_path.stat().st_size < 1024:
-            logger.error(f"Video file too small: {self.video_path}")
+        if self.processed_video_path.stat().st_size < 1024:
+            logger.error(f"Video file too small: {self.processed_video_path}")
             return False
             
         logger.debug("FFmpeg outputs validated successfully")
@@ -217,3 +219,7 @@ class VideoProcessingContext:
     def get_audio_analysis_path(self, analysis_type: str) -> Path:
         """Get path to audio analysis directory or specific analysis file"""
         return self.build_directory / "audio_analysis" / analysis_type
+    
+    def get_extraction_directory(self) -> Path:
+        """Get path to extraction directory for audio/video files"""
+        return self.build_directory / "extraction"

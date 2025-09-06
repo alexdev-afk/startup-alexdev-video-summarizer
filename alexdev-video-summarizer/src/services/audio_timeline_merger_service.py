@@ -1,8 +1,8 @@
 """
-Enhanced Timeline Merger Service
+Audio Timeline Merger Service
 
-Combines EnhancedTimeline objects from multiple services into a single
-hierarchical timeline with proper chronological organization.
+DEMUCS BREAKTHROUGH: Combines audio timeline objects from clean separated sources
+into a single chronological timeline with no complex heuristic filtering needed.
 """
 
 import json
@@ -17,16 +17,16 @@ from utils.enhanced_timeline_schema import EnhancedTimeline, TimelineEvent, Time
 logger = get_logger(__name__)
 
 
-class EnhancedTimelineMergerError(Exception):
-    """Enhanced timeline merger processing error"""
+class AudioTimelineMergerError(Exception):
+    """Audio timeline merger processing error"""
     pass
 
 
-class EnhancedTimelineMergerService:
-    """Service to merge multiple EnhancedTimeline objects into a single master timeline"""
+class AudioTimelineMergerService:
+    """Service to merge audio timelines from clean Demucs-separated sources"""
     
     def __init__(self, config: Dict[str, Any]):
-        """Initialize enhanced timeline merger service"""
+        """Initialize audio timeline merger service"""
         self.config = config
         self.merger_config = config.get('timeline_merger', {})
         
@@ -36,7 +36,7 @@ class EnhancedTimelineMergerService:
         self.time_precision = self.merger_config.get('time_precision', 3)  # decimal places
         self.overlap_tolerance = self.merger_config.get('overlap_tolerance', 0.1)  # seconds
         
-        logger.info(f"Enhanced timeline merger initialized - priority: {self.priority_order}")
+        logger.info(f"Audio timeline merger initialized - DEMUCS breakthrough approach")
     
     def create_combined_audio_timeline(
         self,
@@ -44,112 +44,83 @@ class EnhancedTimelineMergerService:
         output_path: Optional[str] = None
     ) -> EnhancedTimeline:
         """
-        Create combined audio timeline from individual service timelines with filtering
+        DEMUCS BREAKTHROUGH: Create combined timeline by simple chronological merging
         
-        Flow: Individual Service Timelines -> Filter & Merge -> Combined Audio Timeline (Final Output)
+        With Demucs separated audio sources, no complex filtering needed:
+        - whisper_voice: Clean transcription
+        - librosa_music: Pure music analysis
+        - pyaudio_music: Music features 
+        - pyaudio_voice: Voice features
         
         Args:
-            timelines: List of unfiltered EnhancedTimeline objects from individual services
-            output_path: Optional path to save the master timeline
+            timelines: List of EnhancedTimeline objects from clean Demucs sources
+            output_path: Optional path to save the combined timeline
             
         Returns:
-            Master timeline with filtered and merged content
+            Combined timeline with chronologically ordered clean events
         """
         start_time = time.time()
         
         try:
             if not timelines:
-                raise EnhancedTimelineMergerError("No timelines provided for merging")
+                raise AudioTimelineMergerError("No timelines provided for merging")
             
-            # Use first timeline as base and merge others into it
+            # Use first timeline as base
             base_timeline = timelines[0]
             
-            # Create master timeline with combined data
+            # Create combined timeline
             combined_timeline = EnhancedTimeline(
                 audio_file=base_timeline.audio_file,
                 total_duration=base_timeline.total_duration
             )
             
-            # Add master as source
-            combined_timeline.sources_used.append("combined_audio")
+            # Add source traceability
+            combined_timeline.sources_used.append("demucs_combined")
             
-            # Merge sources from all timelines (deduplicated)
+            # Collect sources from all timelines
             unique_sources = set()
             for timeline in timelines:
                 unique_sources.update(timeline.sources_used)
             combined_timeline.sources_used.extend(list(unique_sources))
             
-            # Merge timeline data (speakers, transcripts, etc.)
-            self._merge_timelines_data([combined_timeline] + timelines)
+            # Merge timeline metadata (speakers, etc.)
+            self._merge_timeline_metadata_simple(combined_timeline, timelines)
             
-            # Separate timelines by service type
-            whisper_timelines = [t for t in timelines if "whisper" in t.sources_used]
-            librosa_timelines = [t for t in timelines if "librosa" in t.sources_used]
-            pyaudio_timelines = [t for t in timelines if "pyaudio" in t.sources_used]
+            # DEMUCS BREAKTHROUGH: Just collect all events and sort chronologically
+            all_events = []
             
-            # STEP 1: Apply filtering logic to LibROSA events BEFORE creating unified spans
-            filtered_librosa_timelines = self._filter_librosa_speech_artifacts_from_timelines(
-                librosa_timelines, whisper_timelines, pyaudio_timelines, combined_timeline
-            )
-            
-            # STEP 2: Create unified spans from filtered LibROSA + original PyAudio events
-            unified_spans = self._create_unified_librosa_pyaudio_spans(filtered_librosa_timelines, pyaudio_timelines)
-            
-            # Get Whisper spans (keep separate)
-            whisper_spans = []
-            for timeline in whisper_timelines:
-                for span in timeline.spans:
-                    # Label as whisper span
-                    span.details["span_group"] = "whisper"
-                    whisper_spans.append(span)
-            
-            # Combine all spans and sort by start time
-            all_spans = whisper_spans + unified_spans
-            sorted_spans = sorted(all_spans, key=lambda s: s.start)
-            
-            # Add spans to master timeline
-            for span in sorted_spans:
-                combined_timeline.add_span(span)
-            
-            # Collect standalone events (events not within any span)
-            # Exclude events that were already nested into unified spans
-            standalone_events = []
-            nested_event_timestamps = set()
-            
-            # Track which events were nested into unified spans
-            for span in all_spans:
-                for event in span.events:
-                    nested_event_timestamps.add(event.timestamp)
-            
-            # Add events that weren't nested into any span
             for timeline in timelines:
+                # Add all events from this timeline
                 for event in timeline.events:
-                    if event.timestamp not in nested_event_timestamps:
-                        standalone_events.append(event)
+                    all_events.append(event)
+                    logger.debug(f"Added event from {timeline.sources_used}: {event.description} at {event.timestamp}s")
             
-            # Sort standalone events chronologically
-            sorted_standalone_events = sorted(standalone_events, key=lambda e: e.timestamp)
+            # Sort events chronologically
+            all_events.sort(key=lambda e: e.timestamp)
+            combined_timeline.events = all_events
             
-            # Add standalone events to master timeline
-            for event in sorted_standalone_events:
-                combined_timeline.add_event(event)
+            # No spans needed - just clean chronological events!
+            combined_timeline.spans = []
             
-            # Resolve double assignments (events in multiple spans)
-            combined_timeline.resolve_double_assignments()
+            # Add processing notes
+            combined_timeline.processing_notes.append("DEMUCS BREAKTHROUGH: Simple chronological merger - no heuristic filtering needed")
+            combined_timeline.processing_notes.append(f"Clean sources: {list(unique_sources)}")
+            combined_timeline.processing_notes.append(f"Total events: {len(all_events)} chronologically ordered")
             
             processing_time = time.time() - start_time
-            logger.info(f"Enhanced timeline merge completed: {len(combined_timeline.events)} events, {len(combined_timeline.spans)} spans in {processing_time:.2f}s")
+            logger.info(f"DEMUCS BREAKTHROUGH: Simple merge completed in {processing_time:.2f}s")
+            logger.info(f"Result: {len(all_events)} clean events, 0 spans (no complex filtering needed)")
             
             # Save if output path provided
             if output_path:
                 combined_timeline.save_to_file(output_path)
-                logger.info(f"Master enhanced timeline saved to: {output_path}")
+                logger.info(f"Combined timeline saved to: {output_path}")
             
             return combined_timeline
             
         except Exception as e:
-            logger.error(f"Enhanced timeline merge failed: {e}")
-            raise EnhancedTimelineMergerError(f"Timeline merge failed: {e}")
+            logger.error(f"Audio timeline merge failed: {e}")
+            raise AudioTimelineMergerError(f"Timeline merge failed: {e}")
     
     def _merge_timelines_data(self, timelines: List[EnhancedTimeline]) -> None:
         """Merge data from all timelines into the first one"""
@@ -687,6 +658,28 @@ class EnhancedTimelineMergerService:
         # No PyAudio events found - fall back to other filtering methods
         return False
     
+    def _merge_timeline_metadata_simple(self, combined_timeline: EnhancedTimeline, timelines: List[EnhancedTimeline]):
+        """Simple metadata merge for Demucs breakthrough"""
+        # Combine speakers (deduplicated)
+        unique_speakers = set()
+        for timeline in timelines:
+            if hasattr(timeline, 'speakers') and timeline.speakers:
+                unique_speakers.update(timeline.speakers)
+        combined_timeline.speakers = list(unique_speakers)
+        
+        # Combine transcripts
+        combined_transcripts = []
+        for timeline in timelines:
+            if hasattr(timeline, 'full_transcript') and timeline.full_transcript:
+                combined_transcripts.append(timeline.full_transcript)
+        combined_timeline.full_transcript = " ".join(combined_transcripts)
+        
+        # Combine processing notes
+        for timeline in timelines:
+            if hasattr(timeline, 'processing_notes') and timeline.processing_notes:
+                for note in timeline.processing_notes:
+                    combined_timeline.processing_notes.append(f"[{timeline.sources_used[0] if timeline.sources_used else 'unknown'}] {note}")
+
     def cleanup(self):
         """Cleanup resources"""
-        logger.debug("Enhanced timeline merger service cleanup complete")
+        logger.debug("Audio timeline merger service cleanup complete")

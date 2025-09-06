@@ -25,7 +25,7 @@ from services.scene_detection_service import SceneDetectionService
 from services.enhanced_whisper_timeline_service import EnhancedWhisperTimelineService
 from services.librosa_timeline_service import LibROSATimelineService
 from services.pyaudio_timeline_service import PyAudioTimelineService
-from services.enhanced_timeline_merger_service import EnhancedTimelineMergerService
+from services.audio_timeline_merger_service import AudioTimelineMergerService
 from utils.config_loader import ConfigLoader
 from utils.logger import setup_logging
 
@@ -159,7 +159,7 @@ def run_timeline_merger(timelines, data):
     timelines_dir = data['build_dir'] / "audio_timelines"
     
     try:
-        merger_service = EnhancedTimelineMergerService(config)
+        merger_service = AudioTimelineMergerService(config)
         
         # Create master timeline with clean name
         master_path = timelines_dir / "combined_audio_timeline.json"

@@ -259,30 +259,6 @@ class EnhancedTimeline:
         with open(output_path, 'w', encoding='utf-8') as f:
             json.dump(self.to_dict(), f, indent=2, ensure_ascii=False)
     
-    def save_intermediate_files(self, build_dir: Path):
-        """Save intermediate processing files for auditing"""
-        build_dir = Path(build_dir)
-        
-        # Save main timeline
-        main_timeline_path = build_dir / "enhanced_timeline.json"
-        self.save_to_file(str(main_timeline_path))
-        
-        # Save individual service outputs for auditing
-        for source in self.sources_used:
-            source_spans = [span for span in self.spans if span.source == source]
-            if source_spans:
-                source_timeline = {
-                    "source": source,
-                    "audio_file": self.audio_file,
-                    "spans": [span.to_dict() for span in source_spans],
-                    "created_at": self.created_at
-                }
-                
-                source_path = build_dir / f"{source}_intermediate.json"
-                with open(source_path, 'w', encoding='utf-8') as f:
-                    json.dump(source_timeline, f, indent=2, ensure_ascii=False)
-        
-        return main_timeline_path
 
 
 # Utility functions for service integration

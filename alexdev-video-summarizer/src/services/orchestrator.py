@@ -15,6 +15,8 @@ from dataclasses import dataclass
 
 from services.ffmpeg_service import FFmpegService
 from services.scene_detection_service import SceneDetectionService
+from services.demucs_service import DemucsService
+from services.demucs_audio_coordinator import DemucsAudioCoordinatorService
 from services.internvl3_timeline_service import InternVL3TimelineService
 from services.knowledge_generator import KnowledgeGenerator
 from utils.processing_context import VideoProcessingContext
@@ -44,6 +46,8 @@ class VideoProcessingOrchestrator:
         # Initialize services
         self.ffmpeg_service = FFmpegService(config)
         self.scene_service = SceneDetectionService(config)
+        self.demucs_service = DemucsService(config)
+        self.audio_coordinator = DemucsAudioCoordinatorService(config)
         
         # Current video processing service
         self.video_service = InternVL3TimelineService(config)
@@ -75,7 +79,7 @@ class VideoProcessingOrchestrator:
             
             # Step 1: FFmpeg Foundation (CRITICAL)
             progress_callback('ffmpeg', {'stage': 'starting', 'tool': 'FFmpeg'})
-            context.audio_path, context.video_path = self.ffmpeg_service.extract_streams(video_path)
+            context.audio_path, context.processed_video_path = self.ffmpeg_service.extract_streams(video_path)
             
             if not context.validate_ffmpeg_output():
                 raise Exception("FFmpeg audio/video extraction failed")
@@ -83,7 +87,7 @@ class VideoProcessingOrchestrator:
             
             # Step 2: Scene Detection (CRITICAL)
             progress_callback('scene_detection', {'stage': 'starting', 'tool': 'PySceneDetect'})
-            context.scene_data = self.scene_service.analyze_video_scenes(context.video_path)
+            context.scene_data = self.scene_service.analyze_video_scenes(context.processed_video_path)
             
             if context.scene_data['scene_count'] == 0:
                 raise Exception("No scenes detected in video")
@@ -93,29 +97,71 @@ class VideoProcessingOrchestrator:
                 'scene_count': context.scene_data['scene_count']
             })
             
-            # Step 2.5: Frame Extraction (current implementation)
+            # Step 2.5: Demucs Audio Separation (BREAKTHROUGH)
+            progress_callback('demucs_separation', {'stage': 'starting', 'tool': 'Demucs'})
+            context.vocals_path, context.no_vocals_path = self.demucs_service.separate_audio(context)
+            
+            if not context.vocals_path.exists() or not context.no_vocals_path.exists():
+                raise Exception("Demucs audio separation failed")
+            progress_callback('demucs_separation', {
+                'stage': 'completed',
+                'tool': 'Demucs',
+                'vocals_file': context.vocals_path.name,
+                'instrumentals_file': context.no_vocals_path.name
+            })
+            
+            # Step 3: Demucs Audio Processing (BREAKTHROUGH)
+            progress_callback('audio_processing', {'stage': 'starting', 'approach': 'demucs_separated'})
+            audio_timelines = self.audio_coordinator.process_all_audio_timelines(context)
+            
+            # Save individual timeline files
+            self.audio_coordinator.save_individual_timelines(audio_timelines, context)
+            
+            # BREAKTHROUGH: Create combined timeline with simple merger (no 692-line heuristics!)
+            combined_timeline = self.audio_coordinator.create_combined_timeline(audio_timelines, context)
+            
+            progress_callback('audio_processing', {
+                'stage': 'completed',
+                'approach': 'demucs_separated',
+                'individual_timelines': len(audio_timelines),
+                'combined_events': len(combined_timeline.events) if combined_timeline else 0,
+                'sources': ['whisper_voice', 'librosa_music', 'pyaudio_music', 'pyaudio_voice'],
+                'breakthrough': 'NO_HEURISTIC_FILTERING_NEEDED'
+            })
+            
+            # Step 4: Frame Extraction (FIXED)
             progress_callback('frame_extraction', {'stage': 'starting'})
-            # Frames already extracted by scene detection service
-            frame_count = context.scene_data['scene_count'] * 3  # 3 frames per scene
+            # Extract representative frames for each scene (3 frames per scene)
+            frame_extraction_result = self.scene_service.coordinate_frame_extraction(
+                context.processed_video_path, 
+                context.scene_data['boundaries'], 
+                self.ffmpeg_service
+            )
+            context.scene_data.update(frame_extraction_result)
+            frame_count = frame_extraction_result.get('total_frames_extracted', 0)
             progress_callback('frame_extraction', {
                 'stage': 'completed',
                 'frames_extracted': frame_count
             })
             
-            # Step 3: InternVL3 Frame-Based Video Processing
+            # Step 5: InternVL3 Frame-Based Video Processing
             progress_callback('video_processing', {
                 'stage': 'starting', 
                 'processing_mode': 'internvl3_frames'
             })
             
             # Process all extracted frames with InternVL3
-            video_timeline = self.video_service.generate_and_save(str(context.video_path), None)
+            video_timeline = self.video_service.generate_and_save(str(context.processed_video_path), None)
             
             progress_callback('video_processing', {
                 'stage': 'completed',
                 'events_generated': len(video_timeline.events) if video_timeline else 0,
                 'total_duration': video_timeline.total_duration if video_timeline else 0
             })
+            
+            # Cleanup video service to free VRAM
+            if hasattr(self.video_service, 'cleanup'):
+                self.video_service.cleanup()
             
             # Store video analysis results in context
             if video_timeline:
