@@ -147,6 +147,22 @@ cpu_pipeline:
     # REMOVED interpretive mode - was fake heuristic analysis with arbitrary thresholds
     # Timeline services now handle real event-based analysis
 
+# Enhanced Timeline Merger Settings
+timeline_merger:
+  # LibROSA Speech Artifact Filtering
+  enable_speech_artifact_filtering: true   # Filter LibROSA events that correlate with speech
+  
+  # PyAudio-based filtering (distance from PyAudio emotion change events)
+  pyaudio_distance_threshold: 0.7         # LibROSA events >0.7s from PyAudio events are likely valid musical events
+  
+  # Boundary exception rules - preserve events near structural boundaries
+  boundary_exception_distance: 0.5        # Events within 0.5s of boundaries are preserved regardless of other filters
+  preserve_boundary_events: true          # Enable boundary exception logic
+  
+  # Alternative filtering methods (if PyAudio filtering disabled)
+  word_distance_threshold: 0.15           # LibROSA events >0.15s from words (less reliable)
+  enable_event_clustering_filter: false   # Filter dense clusters of events (experimental)
+
 # Error Handling & Circuit Breaker
 error_handling:
   # Circuit breaker configuration

@@ -38,20 +38,22 @@ class EnhancedTimelineMergerService:
         
         logger.info(f"Enhanced timeline merger initialized - priority: {self.priority_order}")
     
-    def merge_enhanced_timelines(
+    def create_master_timeline(
         self,
         timelines: List[EnhancedTimeline],
         output_path: Optional[str] = None
     ) -> EnhancedTimeline:
         """
-        Merge multiple EnhancedTimeline objects into a single master timeline
+        Create master timeline from individual service timelines with filtering
+        
+        Flow: Individual Service Timelines -> Filter & Merge -> Master Timeline (Final Output)
         
         Args:
-            timelines: List of EnhancedTimeline objects to merge
-            output_path: Optional path to save the merged timeline
+            timelines: List of unfiltered EnhancedTimeline objects from individual services
+            output_path: Optional path to save the master timeline
             
         Returns:
-            EnhancedTimeline object with combined content from all services
+            Master timeline with filtered and merged content
         """
         start_time = time.time()
         
@@ -85,8 +87,13 @@ class EnhancedTimelineMergerService:
             librosa_timelines = [t for t in timelines if "librosa" in t.sources_used]
             pyaudio_timelines = [t for t in timelines if "pyaudio" in t.sources_used]
             
-            # Create unified LibROSA/PyAudio spans (same boundaries, merged events)
-            unified_spans = self._create_unified_librosa_pyaudio_spans(librosa_timelines, pyaudio_timelines)
+            # STEP 1: Apply filtering logic to LibROSA events BEFORE creating unified spans
+            filtered_librosa_timelines = self._filter_librosa_speech_artifacts_from_timelines(
+                librosa_timelines, whisper_timelines, pyaudio_timelines, master_timeline
+            )
+            
+            # STEP 2: Create unified spans from filtered LibROSA + original PyAudio events
+            unified_spans = self._create_unified_librosa_pyaudio_spans(filtered_librosa_timelines, pyaudio_timelines)
             
             # Get Whisper spans (keep separate)
             whisper_spans = []
@@ -321,6 +328,364 @@ class EnhancedTimelineMergerService:
         
         logger.debug(f"Created {len(unified_spans)} unified LibROSA/PyAudio spans")
         return unified_spans
+    
+    def _filter_librosa_speech_artifacts(self, master_timeline):
+        """
+        Filter out LibROSA events that correlate with speech segments.
+        
+        Cross-service correlation filtering that removes musical events detected
+        during speech, which are typically speech artifacts rather than genuine
+        musical events.
+        """
+        try:
+            # Get speech segments from Whisper events
+            speech_segments = self._extract_speech_segments(master_timeline)
+            
+            if not speech_segments:
+                logger.debug("No speech segments found - skipping LibROSA speech artifact filtering")
+                return
+            
+            # Filter LibROSA events
+            original_events = master_timeline.events.copy()
+            librosa_events = [e for e in original_events if e.source == "librosa"]
+            other_events = [e for e in original_events if e.source != "librosa"]
+            
+            if not librosa_events:
+                logger.debug("No LibROSA events found - skipping speech artifact filtering")
+                return
+            
+            # Analyze each LibROSA event for speech correlation
+            legitimate_events = []
+            filtered_artifacts = []
+            
+            for event in librosa_events:
+                if self._is_speech_artifact(event, speech_segments, master_timeline):
+                    filtered_artifacts.append(event)
+                    logger.debug(f"Filtered LibROSA speech artifact: {event.timestamp:.2f}s - {event.description}")
+                else:
+                    legitimate_events.append(event)
+            
+            # Update master timeline with filtered LibROSA events
+            master_timeline.events = other_events + legitimate_events
+            
+            logger.info(f"LibROSA speech artifact filtering: {len(librosa_events)} -> {len(legitimate_events)} events "
+                       f"({len(filtered_artifacts)} speech artifacts removed)")
+            
+        except Exception as e:
+            logger.warning(f"LibROSA speech artifact filtering failed: {e}")
+    
+    def _extract_speech_segments(self, master_timeline) -> List[tuple]:
+        """Extract speech segment timing from Whisper events in the master timeline."""
+        speech_segments = []
+        
+        try:
+            # Look for Whisper events that indicate speech timing
+            whisper_events = [e for e in master_timeline.events if e.source == "whisper"]
+            
+            if not whisper_events:
+                logger.debug("No Whisper events found for speech segment extraction")
+                return speech_segments
+            
+            # Group consecutive Whisper events into speech segments
+            current_segment_start = None
+            current_segment_end = None
+            
+            for event in sorted(whisper_events, key=lambda e: e.timestamp):
+                if current_segment_start is None:
+                    current_segment_start = event.timestamp
+                    current_segment_end = event.timestamp
+                else:
+                    # If this event is close to the previous one, extend the segment
+                    if event.timestamp - current_segment_end <= 1.0:  # 1 second gap tolerance
+                        current_segment_end = event.timestamp
+                    else:
+                        # Gap too large, save current segment and start new one
+                        if current_segment_end > current_segment_start:
+                            speech_segments.append((current_segment_start, current_segment_end))
+                        current_segment_start = event.timestamp
+                        current_segment_end = event.timestamp
+            
+            # Save final segment
+            if current_segment_start is not None and current_segment_end > current_segment_start:
+                speech_segments.append((current_segment_start, current_segment_end))
+            
+            logger.debug(f"Extracted {len(speech_segments)} speech segments from Whisper events")
+            
+        except Exception as e:
+            logger.warning(f"Failed to extract speech segments: {e}")
+        
+        return speech_segments
+    
+    def _is_speech_artifact(self, event, speech_segments: List[tuple], master_timeline=None) -> bool:
+        """
+        Determine if a LibROSA event is likely a speech artifact using multiple criteria.
+        
+        Args:
+            event: LibROSA timeline event
+            speech_segments: List of (start, end) speech timing tuples
+            master_timeline: Master timeline for boundary and PyAudio analysis
+            
+        Returns:
+            True if event should be filtered as speech artifact
+        """
+        event_time = event.timestamp
+        merger_config = self.config.get('timeline_merger', {})
+        
+        # Check if filtering is enabled
+        if not merger_config.get('enable_speech_artifact_filtering', True):
+            return False
+        
+        # 1. Boundary Exception Rule - preserve events near structural boundaries
+        if merger_config.get('preserve_boundary_events', True):
+            if self._is_near_structural_boundary(event_time, master_timeline, merger_config):
+                logger.debug(f"LibROSA event at {event_time:.2f}s preserved due to boundary proximity")
+                return False
+        
+        # 2. PyAudio-based filtering - check distance from PyAudio events
+        pyaudio_threshold = merger_config.get('pyaudio_distance_threshold', 0.7)
+        if master_timeline and self._has_distant_pyaudio_events(event_time, master_timeline, pyaudio_threshold):
+            logger.debug(f"LibROSA event at {event_time:.2f}s preserved due to PyAudio distance > {pyaudio_threshold}s")
+            return False
+        
+        # 3. Traditional speech overlap analysis as fallback
+        for start, end in speech_segments:
+            if start <= event_time <= end:
+                # Event is during speech - apply classification logic
+                return self._classify_speech_overlap_event(event)
+        
+        # Event is during silence/pure music - likely legitimate
+        return False
+    
+    def _classify_speech_overlap_event(self, event) -> bool:
+        """
+        Classify whether an event during speech is likely a speech artifact.
+        
+        High probability speech artifacts:
+        - Musical onsets with generic descriptions (speech syllables)
+        - Frequent harmonic shifts (speech pitch variations)
+        - High-frequency spectral events
+        
+        Lower probability (may be legitimate):
+        - Tempo changes (could be background music tempo shift)
+        - Structural boundaries (could be music section transitions)
+        """
+        event_description = event.description.lower()
+        event_details = getattr(event, 'details', {})
+        
+        # High confidence speech artifacts - these are almost always speech during speech segments
+        if 'musical onset' in event_description:
+            # Musical onsets during speech are typically speech syllables/consonants
+            return True
+        
+        if 'harmonic shift' in event_description:
+            # Harmonic shifts during speech are likely speech pitch variations
+            return True
+        
+        # Medium confidence speech artifacts
+        if any(term in event_description for term in ['spectral', 'frequency', 'timbre']):
+            # Spectral events during speech often reflect speech characteristics
+            return True
+        
+        # Lower confidence - may be legitimate background music events
+        if any(term in event_description for term in ['tempo', 'structural', 'rhythm']):
+            # These could be legitimate background music changes during speech
+            # Keep them unless we have strong evidence otherwise
+            return False
+        
+        # Default: if during speech and no clear classification, lean toward artifact
+        return True
+    
+    def _filter_librosa_speech_artifacts_from_timelines(
+        self, 
+        librosa_timelines: List, 
+        whisper_timelines: List, 
+        pyaudio_timelines: List, 
+        temp_master_timeline
+    ) -> List:
+        """
+        Filter LibROSA speech artifacts from raw timelines before unified span creation.
+        
+        Args:
+            librosa_timelines: Raw LibROSA timeline data
+            whisper_timelines: Whisper timeline data for speech segments
+            pyaudio_timelines: PyAudio timeline data for emotion events
+            temp_master_timeline: Temporary timeline with global data
+            
+        Returns:
+            Filtered LibROSA timelines with speech artifacts removed
+        """
+        merger_config = self.config.get('timeline_merger', {})
+        
+        if not merger_config.get('enable_speech_artifact_filtering', True):
+            logger.info("LibROSA speech artifact filtering disabled")
+            return librosa_timelines
+        
+        filtered_timelines = []
+        
+        for librosa_timeline in librosa_timelines:
+            # Extract speech segments from Whisper timelines
+            speech_segments = []
+            for whisper_timeline in whisper_timelines:
+                for span in whisper_timeline.spans:
+                    speech_segments.append((span.start, span.end))
+            
+            # Extract PyAudio events for distance analysis
+            pyaudio_events = []
+            for pyaudio_timeline in pyaudio_timelines:
+                for event in pyaudio_timeline.events:
+                    pyaudio_events.append(event.timestamp)
+            
+            # Filter events
+            legitimate_events = []
+            filtered_artifacts = []
+            
+            for event in librosa_timeline.events:
+                if self._is_speech_artifact_from_raw_data(
+                    event, speech_segments, pyaudio_events, temp_master_timeline, merger_config
+                ):
+                    filtered_artifacts.append(event)
+                    logger.debug(f"Filtered LibROSA speech artifact: {event.timestamp:.2f}s - {event.description}")
+                else:
+                    legitimate_events.append(event)
+            
+            # Create new timeline with filtered events
+            filtered_timeline = librosa_timeline  # Keep original structure
+            filtered_timeline.events = legitimate_events
+            filtered_timelines.append(filtered_timeline)
+            
+            logger.info(f"LibROSA filtering: {len(filtered_artifacts)} artifacts removed, {len(legitimate_events)} events preserved")
+        
+        return filtered_timelines
+    
+    def _is_speech_artifact_from_raw_data(
+        self, 
+        event, 
+        speech_segments: List[tuple], 
+        pyaudio_events: List[float], 
+        temp_master_timeline, 
+        config: Dict[str, Any]
+    ) -> bool:
+        """
+        Determine if a LibROSA event is a speech artifact using raw timeline data.
+        
+        Args:
+            event: LibROSA event to analyze
+            speech_segments: List of (start, end) speech timing tuples
+            pyaudio_events: List of PyAudio event timestamps
+            temp_master_timeline: Timeline with global data
+            config: Timeline merger configuration
+            
+        Returns:
+            True if event should be filtered as speech artifact
+        """
+        event_time = event.timestamp
+        
+        # 1. Boundary Exception Rule - preserve events near structural boundaries
+        if config.get('preserve_boundary_events', True):
+            boundary_distance = config.get('boundary_exception_distance', 0.5)
+            video_duration = temp_master_timeline.total_duration
+            
+            # Check video start/end boundaries
+            if event_time <= boundary_distance or (video_duration - event_time) <= boundary_distance:
+                logger.debug(f"LibROSA event at {event_time:.2f}s preserved due to video boundary proximity")
+                return False
+            
+            # Check speech segment boundaries
+            for start, end in speech_segments:
+                if (abs(event_time - start) <= boundary_distance or 
+                    abs(event_time - end) <= boundary_distance):
+                    logger.debug(f"LibROSA event at {event_time:.2f}s preserved due to speech boundary proximity")
+                    return False
+        
+        # 2. PyAudio-based filtering - check distance from PyAudio events
+        pyaudio_threshold = config.get('pyaudio_distance_threshold', 0.7)
+        if pyaudio_events:
+            min_distance = min(abs(event_time - pyaudio_time) for pyaudio_time in pyaudio_events)
+            if min_distance > pyaudio_threshold:
+                logger.debug(f"LibROSA event at {event_time:.2f}s preserved due to PyAudio distance > {pyaudio_threshold}s")
+                return False
+        
+        # 3. Traditional speech overlap analysis as fallback
+        for start, end in speech_segments:
+            if start <= event_time <= end:
+                # Event is during speech - apply classification logic
+                return self._classify_speech_overlap_event(event)
+        
+        # Event is during silence/pure music - likely legitimate
+        return False
+    
+    def _is_near_structural_boundary(self, event_time: float, master_timeline, config: Dict[str, Any]) -> bool:
+        """
+        Check if event is near structural boundaries (video start/end, segment transitions, span boundaries).
+        
+        Args:
+            event_time: Timestamp of the LibROSA event
+            master_timeline: Master timeline containing all spans and events
+            config: Timeline merger configuration
+            
+        Returns:
+            True if event is within boundary_exception_distance of any structural boundary
+        """
+        if not master_timeline:
+            return False
+        
+        boundary_distance = config.get('boundary_exception_distance', 0.5)
+        
+        # Check video start/end boundaries
+        video_duration = master_timeline.get('global_data', {}).get('duration', 0)
+        if event_time <= boundary_distance or (video_duration - event_time) <= boundary_distance:
+            return True
+        
+        # Check Whisper segment boundaries (speech start/end points)
+        for span in master_timeline.get('timeline_spans', []):
+            if span.get('source') == 'whisper':
+                span_start = span.get('start', 0)
+                span_end = span.get('end', 0)
+                
+                # Check proximity to segment start or end
+                if (abs(event_time - span_start) <= boundary_distance or 
+                    abs(event_time - span_end) <= boundary_distance):
+                    return True
+        
+        return False
+    
+    def _has_distant_pyaudio_events(self, event_time: float, master_timeline, threshold: float) -> bool:
+        """
+        Check if LibROSA event is sufficiently far from PyAudio emotion detection events.
+        
+        Args:
+            event_time: Timestamp of the LibROSA event
+            master_timeline: Master timeline containing PyAudio events
+            threshold: Minimum distance required from PyAudio events
+            
+        Returns:
+            True if event is >threshold seconds from all PyAudio events
+        """
+        if not master_timeline:
+            return False
+        
+        # Find PyAudio events in the master timeline
+        pyaudio_events = []
+        
+        # Check both standalone events and span events
+        for event in master_timeline.get('events', []):
+            if event.get('source') == 'pyaudio':
+                pyaudio_events.append(event['timestamp'])
+        
+        for span in master_timeline.get('timeline_spans', []):
+            # Check span events for PyAudio events (they're nested in unified spans)
+            if 'events' in span:
+                for event in span['events']:
+                    if event.get('source') == 'pyaudio':
+                        pyaudio_events.append(event['timestamp'])
+        
+        # Check distance from all PyAudio events
+        if pyaudio_events:
+            min_distance = min(abs(event_time - pyaudio_time) for pyaudio_time in pyaudio_events)
+            return min_distance > threshold
+        
+        # No PyAudio events found - fall back to other filtering methods
+        return False
     
     def cleanup(self):
         """Cleanup resources"""
