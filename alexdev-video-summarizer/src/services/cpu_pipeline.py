@@ -8,7 +8,7 @@ CPU-based visual analysis that runs parallel to GPU pipeline.
 import time
 from typing import Dict, Any
 
-from services.opencv_service import OpenCVService, OpenCVError
+# OpenCV service removed - replaced by InternVL3 VLM
 from utils.logger import get_logger
 
 logger = get_logger(__name__)

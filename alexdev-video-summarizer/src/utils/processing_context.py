@@ -73,8 +73,8 @@ class VideoProcessingContext:
         Args:
             scene_id: Scene identifier
             audio_results: Results from Audio pipeline (Whisper → LibROSA → pyAudioAnalysis)
-            video_gpu_results: Results from Video GPU pipeline (YOLO → EasyOCR)
-            video_cpu_results: Results from Video CPU pipeline (OpenCV)
+            video_gpu_results: Results from Video GPU pipeline (InternVL3 VLM)
+            video_cpu_results: Results from Video CPU pipeline (Visual analysis)
         """
         self.scene_analysis[scene_id] = {
             'scene_id': scene_id,
@@ -99,10 +99,10 @@ class VideoProcessingContext:
                 'audio_classification': audio_results.get('pyaudioanalysis', {}).get('classification', {})
             },
             'visual_analysis': {
-                'objects': video_gpu_results.get('yolo', {}).get('objects', []),
-                'people_count': video_gpu_results.get('yolo', {}).get('people_count', 0),
-                'text_content': video_gpu_results.get('easyocr', {}).get('text', []),
-                'faces': video_cpu_results.get('opencv', {}).get('faces', [])
+                'objects': video_gpu_results.get('internvl3', {}).get('objects', []),
+                'people_count': len([obj for obj in video_gpu_results.get('internvl3', {}).get('objects', []) if obj.get('class') == 'person']),
+                'text_content': video_gpu_results.get('internvl3', {}).get('text_content', []),
+                'faces': video_gpu_results.get('internvl3', {}).get('faces', [])
             }
         }
         

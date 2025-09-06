@@ -125,9 +125,9 @@ class ProgressDisplay:
         elif stage == 'audio_pipeline':
             return "Whisper → LibROSA → pyAudioAnalysis complete"
         elif stage == 'video_gpu_pipeline':
-            return "YOLO → EasyOCR complete"
+            return "InternVL3 VLM complete"
         elif stage == 'video_cpu_pipeline':
-            return "OpenCV complete"
+            return "Visual analysis complete"
         elif stage == 'knowledge_generation':
             file_name = data.get('file', 'knowledge_base.md')
             return f"Created: {file_name}"

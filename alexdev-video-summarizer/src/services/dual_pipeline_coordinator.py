@@ -16,8 +16,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import gc
 
 from services.whisper_service import WhisperService
-from services.yolo_service import YOLOService  
-# Note: EasyOCR, LibROSA, pyAudioAnalysis, OpenCV services will be added in later phases
+# YOLO service removed - replaced by InternVL3 VLM
+# Note: LibROSA, pyAudioAnalysis services will be added in later phases
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -44,13 +44,11 @@ class DualPipelineCoordinator:
         
         # Initialize GPU services (sequential coordination required)
         self.whisper_service = WhisperService(config)
-        self.yolo_service = YOLOService(config)
-        # self.easyocr_service = EasyOCRService(config)  # Phase 4
+        # REMOVED: YOLO, EasyOCR, OpenCV services - replaced by InternVL3 VLM
         
         # CPU services will be initialized in Phase 3
         # self.librosa_service = LibROSAService(config)
-        # self.pyaudioanalysis_service = pyAudioAnalysisService(config)  
-        # self.opencv_service = OpenCVService(config)
+        # self.pyaudioanalysis_service = pyAudioAnalysisService(config)
         
         # Threading coordination
         self.gpu_lock = threading.Lock()
@@ -267,15 +265,13 @@ class DualPipelineCoordinator:
         representative_frame = scene_context['representative_frame']
         video_path = scene_context['video_path']
         
-        if representative_frame:
-            # Use representative frame for 70x performance improvement
-            frame_timestamp = representative_frame['frame_timestamp']
-            return self.yolo_service.analyze_video_frame(video_path, frame_timestamp)
-        else:
-            # Fallback: analyze middle of scene
-            scene = scene_context['scene_boundaries']
-            middle_time = (scene['start_seconds'] + scene.get('end_seconds', scene['start_seconds'] + 10)) / 2
-            return self.yolo_service.analyze_video_frame(video_path, middle_time)
+        # REMOVED: YOLO service calls - replaced by InternVL3 VLM
+        return {
+            'visual_analysis': 'Placeholder - YOLO service replaced by InternVL3 VLM',
+            'objects': [],
+            'processing_time': 0.0,
+            'placeholder_mode': True
+        }
     
     def _mock_cpu_processing(self, scene_context: Dict[str, Any]) -> Dict[str, Any]:
         """Mock CPU processing for Phase 2"""
