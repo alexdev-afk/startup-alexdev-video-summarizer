@@ -75,8 +75,8 @@ def test_service_initialization(config):
         
         print(f"[OK] Service initialized: {service.service_name}")
         print(f"[OK] Confidence threshold: {service.confidence_threshold}")
-        print(f"[OK] Frame sample rate: {service.frame_sample_rate} frames per scene")
-        print(f"[OK] Mock mode: {config.get('development', {}).get('mock_ai_services', False)}")
+        print(f"[OK] Model: {service.get_model_name('short')}")
+        print(f"[OK] VLM loaded: {service.scene_analyzer is not None}")
         
         return service
         
@@ -230,31 +230,23 @@ def show_integration_summary():
     """Show how simplified InternVL3 integrates with the pipeline"""
     print("\n=== SIMPLIFIED INTEGRATION SUMMARY ===")
     
-    print("InternVL3 Simplified VLM Integration Status:")
-    print("[OK] Simplified service - no _analysis.json files")
+    print("InternVL3 Timeline Service Status:")
     print("[OK] Direct _timeline.json generation")
-    print("[OK] Frame extraction at 5-second intervals")
-    print("[OK] One event per frame with VLM description")
-    print("[OK] No spans or complex scene processing")
-    print("[OK] Mock mode for development testing")
+    print("[OK] Scene-based frame analysis (3 frames per scene)")
+    print("[OK] VLM analysis per frame with timeline events")
+    print("[OK] Replaces YOLO+EasyOCR+OpenCV with unified VLM")
     
-    print("\nSimplified Architecture:")
-    print("  [SIMPLE] Extract frames every 5 seconds")
-    print("  [SIMPLE] VLM analysis per frame -> direct event")
-    print("  [SIMPLE] Timeline file only - no analysis file")
-    print("  [SIMPLE] No spans, no scene coordination")
+    print("\nProcessing Architecture:")
+    print("  Uses PySceneDetect frame extraction (3 frames per scene)")
+    print("  VLM analysis per frame generates timeline events")
+    print("  Direct timeline.json output")
+    print("  Unified VLM replaces multiple separate services")
     
-    print("\nReplaces 3 complex services with 1 simple VLM:")
-    print("  [REPLACE] YOLO + EasyOCR + OpenCV -> InternVL3 unified analysis")
-    print("  [REPLACE] Complex scene-based processing -> Simple frame-by-frame")
-    print("  [REPLACE] Analysis + Timeline files -> Timeline only")
+    print("\nService Consolidation:")
+    print("  YOLO object detection → InternVL3 comprehensive analysis")
+    print("  EasyOCR text extraction → InternVL3 comprehensive analysis") 
+    print("  OpenCV face detection → InternVL3 comprehensive analysis")
     
-    print("\nNext steps for production:")
-    print("1. Install actual InternVL3 model dependencies")
-    print("2. Implement real model loading in _initialize_vlm()")
-    print("3. Replace mock VLM responses with actual inference")
-    print("4. Test GPU memory management with VLM")
-    print("5. Integrate with simplified visual pipeline orchestrator")
 
 def main():
     """Run complete InternVL3 timeline service test"""
@@ -286,10 +278,9 @@ def main():
     show_integration_summary()
     
     print("\n" + "=" * 50)
-    print("[SUCCESS] Simplified InternVL3 Timeline Service Test Complete")
-    print("[VLM] Direct timeline generation - no analysis files needed")
-    print("[SIMPLE] One event per frame with VLM description")
-    print("[UNIFIED] Single VLM replaces YOLO+EasyOCR+OpenCV complexity")
+    print("[SUCCESS] InternVL3 Timeline Service Test Complete")
+    print("Timeline generation with VLM analysis per frame")
+    print("Unified VLM replaces YOLO+EasyOCR+OpenCV services")
 
 if __name__ == "__main__":
     main()

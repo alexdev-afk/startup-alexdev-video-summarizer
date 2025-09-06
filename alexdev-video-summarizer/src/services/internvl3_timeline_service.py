@@ -346,6 +346,9 @@ class InternVL3TimelineService:
         self.service_name = "internvl3"
         self.vlm_config = config.get('gpu_pipeline', {}).get('internvl3', {})
         
+        # Validate required model configuration early
+        self._validate_model_config()
+        
         # Store prompt at service level for access in save methods
         self.unified_prompt = "Describe what you see in this image. Include the people, setting, objects, and any visible text."
         
@@ -364,6 +367,52 @@ class InternVL3TimelineService:
         
         logger.info("InternVL3 timeline service initialized for comprehensive scene understanding")
     
+    def _validate_model_config(self):
+        """Validate required model configuration for rapid model testing"""
+        required_fields = ['model_name', 'model_path']
+        missing_fields = []
+        
+        for field in required_fields:
+            if not self.vlm_config.get(field):
+                missing_fields.append(f"gpu_pipeline.internvl3.{field}")
+        
+        if missing_fields:
+            error_msg = f"Missing required InternVL3 configuration: {', '.join(missing_fields)}"
+            logger.error(error_msg)
+            logger.info("Example configuration:")
+            logger.info("gpu_pipeline:")
+            logger.info("  internvl3:")
+            logger.info("    model_name: 'InternVL3_5-2B'")
+            logger.info("    model_path: 'OpenGVLab/InternVL3_5-2B'")
+            raise ValueError(error_msg)
+        
+        # Log current model configuration for transparency
+        model_name = self.vlm_config.get('model_name')
+        model_path = self.vlm_config.get('model_path')
+        logger.info(f"Using model: {model_name} from {model_path}")
+    
+    def get_model_name(self, format_type: str = 'full') -> str:
+        """Get model name in different formats for metadata and filenames
+        
+        Args:
+            format_type: 'full', 'clean', or 'short'
+                - full: Complete model name (e.g., 'InternVL3_5-2B')
+                - clean: Filename-safe version (e.g., 'InternVL3_5-2B') 
+                - short: Short version for displays (e.g., 'InternVL3.5-2B')
+        """
+        model_name = self.vlm_config.get('model_name', 'UnknownModel')
+        
+        if format_type == 'full':
+            return model_name
+        elif format_type == 'clean':
+            # Remove path separators and clean for filenames
+            return model_name.replace('/', '-').replace('OpenGVLab-', '').replace('_', '-')
+        elif format_type == 'short':
+            # Human-readable short version
+            return model_name.replace('_', '.').replace('OpenGVLab/', '')
+        else:
+            return model_name
+    
     def _initialize_vlm(self):
         """Initialize InternVL3 model and processor"""
         try:
@@ -373,9 +422,16 @@ class InternVL3TimelineService:
                 self.scene_analyzer = InternVL3SceneAnalyzer(None, None, self.config)
                 return
             
-            # Load InternVL3-2B-Instruct model (copied from model_worker.py)
-            model_path = self.vlm_config.get('model_path', 'OpenGVLab/InternVL3-2B-Instruct')
-            logger.info(f"Loading InternVL3 model: {model_path}")
+            # Load model from config (allows rapid model testing)
+            model_path = self.vlm_config.get('model_path')
+            model_name = self.vlm_config.get('model_name')
+            
+            if not model_path:
+                raise ValueError("model_path must be specified in config under gpu_pipeline.internvl3.model_path")
+            if not model_name:
+                raise ValueError("model_name must be specified in config under gpu_pipeline.internvl3.model_name")
+                
+            logger.info(f"Loading InternVL3 model: {model_name} from {model_path}")
             
             try:
                 from transformers import AutoTokenizer, AutoModel
@@ -407,7 +463,7 @@ class InternVL3TimelineService:
                 
                 # Initialize scene analyzer with real model
                 self.scene_analyzer = InternVL3SceneAnalyzer(self.model, self.tokenizer, self.config)
-                logger.info("InternVL3-2B-Instruct model loaded successfully")
+                logger.info(f"{model_name} model loaded successfully")
                 
             except ImportError as e:
                 logger.warning(f"InternVL3 dependencies not available: {e}")
@@ -447,10 +503,9 @@ class InternVL3TimelineService:
                 total_duration=total_duration
             )
             
-            # Add model and prompt information
-            model_name = self.vlm_config.get('model_name', 'OpenGVLab/InternVL3-2B-Instruct')
+            # Add model and prompt information from config
             timeline.sources_used.append(self.service_name)
-            timeline.processing_notes.append(f"Model: {model_name}")
+            timeline.processing_notes.append(f"Model: {self.get_model_name('short')}")
             timeline.processing_notes.append(f"Prompt: {self.unified_prompt}")
             timeline.processing_notes.append(f"Processing timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
             
@@ -635,10 +690,8 @@ class InternVL3TimelineService:
         timeline_dir = Path('build') / video_name / 'video_timelines'
         timeline_dir.mkdir(parents=True, exist_ok=True)
         
-        # Create filename with full model name and timestamp
-        model_name = self.vlm_config.get('model_name', 'OpenGVLab/InternVL3-2B-Instruct')
-        # Clean model name for filename (remove / and special chars)
-        clean_model_name = model_name.replace('/', '-').replace('OpenGVLab-', '')
+        # Create filename with clean model name from config and timestamp
+        clean_model_name = self.get_model_name('clean')
         timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M')
         
         timeline_file = timeline_dir / f'{clean_model_name}_{timestamp}_timeline.json'
@@ -649,10 +702,12 @@ class InternVL3TimelineService:
             
             # Add model and prompt information at the top
             prompt_used = getattr(self, 'unified_prompt', 'Describe what you see in this image. Include the people, setting, objects, and any visible text.')
+            model_name = self.get_model_name('full')
+            model_path = self.vlm_config.get('model_path', model_name)
             
             model_info = {
                 'model_name': model_name,
-                'model_path': model_name,  # Same as name for HuggingFace models
+                'model_path': model_path,
                 'prompt_used': prompt_used,
                 'processing_timestamp': datetime.now().strftime('%Y-%m-%d %H:%M'),
                 'frame_count': len(timeline_dict.get('events', [])),

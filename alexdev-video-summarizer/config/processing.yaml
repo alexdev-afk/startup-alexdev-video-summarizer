@@ -58,9 +58,11 @@ gpu_pipeline:
   
     
   # InternVL3 VLM Settings - Replaces YOLO+EasyOCR+OpenCV
+  # RAPID MODEL TESTING: Change model_name and model_path to test different models
+  # Model names will automatically appear in filenames, logs, and metadata
   internvl3:
-    model_name: "InternVL3-2B-Instruct"  # Starting with 2B model for efficiency
-    model_path: "OpenGVLab/InternVL3-2B-Instruct"  # Hugging Face model path
+    model_name: "InternVL3_5-2B"  # Will appear as "InternVL3.5-2B" in logs, "InternVL3-5-2B" in filenames
+    model_path: "OpenGVLab/InternVL3_5-2B"  # Hugging Face model path for downloading/loading
     device: "cuda"                     # GPU processing
     confidence_threshold: 0.7          # VLM response confidence threshold
     max_tokens: 256                    # Maximum tokens for VLM response

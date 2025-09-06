@@ -1,4 +1,4 @@
-# InternVL3-2B-Instruct Requirements
+# InternVL3.5-2B Requirements
 # Vision-Language Model for comprehensive scene understanding
 
 # Core dependencies
