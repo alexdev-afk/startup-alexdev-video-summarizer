@@ -8,7 +8,7 @@ Runs the complete audio processing pipeline from scratch:
 3. Whisper transcription → whisper_timeline.json
 4. LibROSA music analysis → librosa_timeline.json  
 5. PyAudio feature analysis → pyaudio_timeline.json
-6. Timeline merger with filtering → master_timeline.json
+6. Timeline merger with filtering → combined_audio_timeline.json
 
 Produces exactly 4 timeline files with clean naming.
 """
@@ -162,15 +162,15 @@ def run_timeline_merger(timelines, data):
         merger_service = EnhancedTimelineMergerService(config)
         
         # Create master timeline with clean name
-        master_path = timelines_dir / "master_timeline.json"
-        master_timeline = merger_service.create_master_timeline(
+        master_path = timelines_dir / "combined_audio_timeline.json"
+        combined_audio_timeline = merger_service.create_combined_audio_timeline(
             timelines=timelines,
             output_path=str(master_path)
         )
         
-        print(f"  [OK] master_timeline.json: {len(master_timeline.events)} events, {len(master_timeline.spans)} spans")
-        print(f"      Duration: {master_timeline.total_duration:.2f}s")
-        print(f"      Speakers: {master_timeline.speakers}")
+        print(f"  [OK] combined_audio_timeline.json: {len(combined_audio_timeline.events)} events, {len(combined_audio_timeline.spans)} spans")
+        print(f"      Duration: {combined_audio_timeline.total_duration:.2f}s")
+        print(f"      Speakers: {combined_audio_timeline.speakers}")
         print(f"      LibROSA filtering applied: speech artifacts removed")
         
         return True
@@ -189,7 +189,7 @@ def show_final_output(data):
         "whisper_timeline.json",
         "librosa_timeline.json", 
         "pyaudio_timeline.json",
-        "master_timeline.json"
+        "combined_audio_timeline.json"
     ]
     
     print("Audio timeline files generated:")
@@ -237,7 +237,7 @@ def show_final_output(data):
         print(f"  [CLEANED] Removed extra timeline files: {extra_files}")
     
     print(f"\n[AUDIO OUTPUT] Location: {timelines_dir}")
-    print("[AUDIO READY] master_timeline.json contains filtered LibROSA events")
+    print("[AUDIO READY] combined_audio_timeline.json contains filtered LibROSA events")
     
     print(f"\n[VISUAL OUTPUT] Location: {frames_dir}")
     print("[VISUAL READY] 3 frames per scene ready for InternVL3 scene understanding")

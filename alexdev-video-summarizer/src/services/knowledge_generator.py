@@ -27,7 +27,7 @@ class KnowledgeGenerator:
         Loads, merges, and formats audio and video timelines into a single markdown file.
 
         Args:
-            audio_json_path: Path to the master_timeline.json file (audio).
+            audio_json_path: Path to the combined_audio_timeline.json file (audio).
             video_json_path: Path to the video timeline JSON file (VLM).
             video_name: The name of the video for the report title.
             output_path: The full path for the output markdown file.

@@ -38,15 +38,15 @@ class EnhancedTimelineMergerService:
         
         logger.info(f"Enhanced timeline merger initialized - priority: {self.priority_order}")
     
-    def create_master_timeline(
+    def create_combined_audio_timeline(
         self,
         timelines: List[EnhancedTimeline],
         output_path: Optional[str] = None
     ) -> EnhancedTimeline:
         """
-        Create master timeline from individual service timelines with filtering
+        Create combined audio timeline from individual service timelines with filtering
         
-        Flow: Individual Service Timelines -> Filter & Merge -> Master Timeline (Final Output)
+        Flow: Individual Service Timelines -> Filter & Merge -> Combined Audio Timeline (Final Output)
         
         Args:
             timelines: List of unfiltered EnhancedTimeline objects from individual services
@@ -65,22 +65,22 @@ class EnhancedTimelineMergerService:
             base_timeline = timelines[0]
             
             # Create master timeline with combined data
-            master_timeline = EnhancedTimeline(
+            combined_timeline = EnhancedTimeline(
                 audio_file=base_timeline.audio_file,
                 total_duration=base_timeline.total_duration
             )
             
             # Add master as source
-            master_timeline.sources_used.append("master")
+            combined_timeline.sources_used.append("combined_audio")
             
             # Merge sources from all timelines (deduplicated)
             unique_sources = set()
             for timeline in timelines:
                 unique_sources.update(timeline.sources_used)
-            master_timeline.sources_used.extend(list(unique_sources))
+            combined_timeline.sources_used.extend(list(unique_sources))
             
             # Merge timeline data (speakers, transcripts, etc.)
-            self._merge_timelines_data([master_timeline] + timelines)
+            self._merge_timelines_data([combined_timeline] + timelines)
             
             # Separate timelines by service type
             whisper_timelines = [t for t in timelines if "whisper" in t.sources_used]
@@ -89,7 +89,7 @@ class EnhancedTimelineMergerService:
             
             # STEP 1: Apply filtering logic to LibROSA events BEFORE creating unified spans
             filtered_librosa_timelines = self._filter_librosa_speech_artifacts_from_timelines(
-                librosa_timelines, whisper_timelines, pyaudio_timelines, master_timeline
+                librosa_timelines, whisper_timelines, pyaudio_timelines, combined_timeline
             )
             
             # STEP 2: Create unified spans from filtered LibROSA + original PyAudio events
@@ -109,7 +109,7 @@ class EnhancedTimelineMergerService:
             
             # Add spans to master timeline
             for span in sorted_spans:
-                master_timeline.add_span(span)
+                combined_timeline.add_span(span)
             
             # Collect standalone events (events not within any span)
             # Exclude events that were already nested into unified spans
@@ -132,20 +132,20 @@ class EnhancedTimelineMergerService:
             
             # Add standalone events to master timeline
             for event in sorted_standalone_events:
-                master_timeline.add_event(event)
+                combined_timeline.add_event(event)
             
             # Resolve double assignments (events in multiple spans)
-            master_timeline.resolve_double_assignments()
+            combined_timeline.resolve_double_assignments()
             
             processing_time = time.time() - start_time
-            logger.info(f"Enhanced timeline merge completed: {len(master_timeline.events)} events, {len(master_timeline.spans)} spans in {processing_time:.2f}s")
+            logger.info(f"Enhanced timeline merge completed: {len(combined_timeline.events)} events, {len(combined_timeline.spans)} spans in {processing_time:.2f}s")
             
             # Save if output path provided
             if output_path:
-                master_timeline.save_to_file(output_path)
+                combined_timeline.save_to_file(output_path)
                 logger.info(f"Master enhanced timeline saved to: {output_path}")
             
-            return master_timeline
+            return combined_timeline
             
         except Exception as e:
             logger.error(f"Enhanced timeline merge failed: {e}")
@@ -329,7 +329,7 @@ class EnhancedTimelineMergerService:
         logger.debug(f"Created {len(unified_spans)} unified LibROSA/PyAudio spans")
         return unified_spans
     
-    def _filter_librosa_speech_artifacts(self, master_timeline):
+    def _filter_librosa_speech_artifacts(self, combined_timeline):
         """
         Filter out LibROSA events that correlate with speech segments.
         
@@ -339,14 +339,14 @@ class EnhancedTimelineMergerService:
         """
         try:
             # Get speech segments from Whisper events
-            speech_segments = self._extract_speech_segments(master_timeline)
+            speech_segments = self._extract_speech_segments(combined_timeline)
             
             if not speech_segments:
                 logger.debug("No speech segments found - skipping LibROSA speech artifact filtering")
                 return
             
             # Filter LibROSA events
-            original_events = master_timeline.events.copy()
+            original_events = combined_timeline.events.copy()
             librosa_events = [e for e in original_events if e.source == "librosa"]
             other_events = [e for e in original_events if e.source != "librosa"]
             
@@ -359,14 +359,14 @@ class EnhancedTimelineMergerService:
             filtered_artifacts = []
             
             for event in librosa_events:
-                if self._is_speech_artifact(event, speech_segments, master_timeline):
+                if self._is_speech_artifact(event, speech_segments, combined_timeline):
                     filtered_artifacts.append(event)
                     logger.debug(f"Filtered LibROSA speech artifact: {event.timestamp:.2f}s - {event.description}")
                 else:
                     legitimate_events.append(event)
             
             # Update master timeline with filtered LibROSA events
-            master_timeline.events = other_events + legitimate_events
+            combined_timeline.events = other_events + legitimate_events
             
             logger.info(f"LibROSA speech artifact filtering: {len(librosa_events)} -> {len(legitimate_events)} events "
                        f"({len(filtered_artifacts)} speech artifacts removed)")
@@ -374,13 +374,13 @@ class EnhancedTimelineMergerService:
         except Exception as e:
             logger.warning(f"LibROSA speech artifact filtering failed: {e}")
     
-    def _extract_speech_segments(self, master_timeline) -> List[tuple]:
+    def _extract_speech_segments(self, combined_timeline) -> List[tuple]:
         """Extract speech segment timing from Whisper events in the master timeline."""
         speech_segments = []
         
         try:
             # Look for Whisper events that indicate speech timing
-            whisper_events = [e for e in master_timeline.events if e.source == "whisper"]
+            whisper_events = [e for e in combined_timeline.events if e.source == "whisper"]
             
             if not whisper_events:
                 logger.debug("No Whisper events found for speech segment extraction")
@@ -416,14 +416,14 @@ class EnhancedTimelineMergerService:
         
         return speech_segments
     
-    def _is_speech_artifact(self, event, speech_segments: List[tuple], master_timeline=None) -> bool:
+    def _is_speech_artifact(self, event, speech_segments: List[tuple], combined_timeline=None) -> bool:
         """
         Determine if a LibROSA event is likely a speech artifact using multiple criteria.
         
         Args:
             event: LibROSA timeline event
             speech_segments: List of (start, end) speech timing tuples
-            master_timeline: Master timeline for boundary and PyAudio analysis
+            combined_timeline: Combined timeline for boundary and PyAudio analysis
             
         Returns:
             True if event should be filtered as speech artifact
@@ -437,13 +437,13 @@ class EnhancedTimelineMergerService:
         
         # 1. Boundary Exception Rule - preserve events near structural boundaries
         if merger_config.get('preserve_boundary_events', True):
-            if self._is_near_structural_boundary(event_time, master_timeline, merger_config):
+            if self._is_near_structural_boundary(event_time, combined_timeline, merger_config):
                 logger.debug(f"LibROSA event at {event_time:.2f}s preserved due to boundary proximity")
                 return False
         
         # 2. PyAudio-based filtering - check distance from PyAudio events
         pyaudio_threshold = merger_config.get('pyaudio_distance_threshold', 0.7)
-        if master_timeline and self._has_distant_pyaudio_events(event_time, master_timeline, pyaudio_threshold):
+        if combined_timeline and self._has_distant_pyaudio_events(event_time, combined_timeline, pyaudio_threshold):
             logger.debug(f"LibROSA event at {event_time:.2f}s preserved due to PyAudio distance > {pyaudio_threshold}s")
             return False
         
@@ -500,7 +500,7 @@ class EnhancedTimelineMergerService:
         librosa_timelines: List, 
         whisper_timelines: List, 
         pyaudio_timelines: List, 
-        temp_master_timeline
+        temp_combined_timeline
     ) -> List:
         """
         Filter LibROSA speech artifacts from raw timelines before unified span creation.
@@ -509,7 +509,7 @@ class EnhancedTimelineMergerService:
             librosa_timelines: Raw LibROSA timeline data
             whisper_timelines: Whisper timeline data for speech segments
             pyaudio_timelines: PyAudio timeline data for emotion events
-            temp_master_timeline: Temporary timeline with global data
+            temp_combined_timeline: Temporary timeline with global data
             
         Returns:
             Filtered LibROSA timelines with speech artifacts removed
@@ -541,7 +541,7 @@ class EnhancedTimelineMergerService:
             
             for event in librosa_timeline.events:
                 if self._is_speech_artifact_from_raw_data(
-                    event, speech_segments, pyaudio_events, temp_master_timeline, merger_config
+                    event, speech_segments, pyaudio_events, temp_combined_timeline, merger_config
                 ):
                     filtered_artifacts.append(event)
                     logger.debug(f"Filtered LibROSA speech artifact: {event.timestamp:.2f}s - {event.description}")
@@ -562,7 +562,7 @@ class EnhancedTimelineMergerService:
         event, 
         speech_segments: List[tuple], 
         pyaudio_events: List[float], 
-        temp_master_timeline, 
+        temp_combined_timeline, 
         config: Dict[str, Any]
     ) -> bool:
         """
@@ -572,7 +572,7 @@ class EnhancedTimelineMergerService:
             event: LibROSA event to analyze
             speech_segments: List of (start, end) speech timing tuples
             pyaudio_events: List of PyAudio event timestamps
-            temp_master_timeline: Timeline with global data
+            temp_combined_timeline: Timeline with global data
             config: Timeline merger configuration
             
         Returns:
@@ -583,7 +583,7 @@ class EnhancedTimelineMergerService:
         # 1. Boundary Exception Rule - preserve events near structural boundaries
         if config.get('preserve_boundary_events', True):
             boundary_distance = config.get('boundary_exception_distance', 0.5)
-            video_duration = temp_master_timeline.total_duration
+            video_duration = temp_combined_timeline.total_duration
             
             # Check video start/end boundaries
             if event_time <= boundary_distance or (video_duration - event_time) <= boundary_distance:
@@ -614,30 +614,30 @@ class EnhancedTimelineMergerService:
         # Event is during silence/pure music - likely legitimate
         return False
     
-    def _is_near_structural_boundary(self, event_time: float, master_timeline, config: Dict[str, Any]) -> bool:
+    def _is_near_structural_boundary(self, event_time: float, combined_timeline, config: Dict[str, Any]) -> bool:
         """
         Check if event is near structural boundaries (video start/end, segment transitions, span boundaries).
         
         Args:
             event_time: Timestamp of the LibROSA event
-            master_timeline: Master timeline containing all spans and events
+            combined_timeline: Master timeline containing all spans and events
             config: Timeline merger configuration
             
         Returns:
             True if event is within boundary_exception_distance of any structural boundary
         """
-        if not master_timeline:
+        if not combined_timeline:
             return False
         
         boundary_distance = config.get('boundary_exception_distance', 0.5)
         
         # Check video start/end boundaries
-        video_duration = master_timeline.get('global_data', {}).get('duration', 0)
+        video_duration = combined_timeline.get('global_data', {}).get('duration', 0)
         if event_time <= boundary_distance or (video_duration - event_time) <= boundary_distance:
             return True
         
         # Check Whisper segment boundaries (speech start/end points)
-        for span in master_timeline.get('timeline_spans', []):
+        for span in combined_timeline.get('timeline_spans', []):
             if span.get('source') == 'whisper':
                 span_start = span.get('start', 0)
                 span_end = span.get('end', 0)
@@ -649,30 +649,30 @@ class EnhancedTimelineMergerService:
         
         return False
     
-    def _has_distant_pyaudio_events(self, event_time: float, master_timeline, threshold: float) -> bool:
+    def _has_distant_pyaudio_events(self, event_time: float, combined_timeline, threshold: float) -> bool:
         """
         Check if LibROSA event is sufficiently far from PyAudio emotion detection events.
         
         Args:
             event_time: Timestamp of the LibROSA event
-            master_timeline: Master timeline containing PyAudio events
+            combined_timeline: Master timeline containing PyAudio events
             threshold: Minimum distance required from PyAudio events
             
         Returns:
             True if event is >threshold seconds from all PyAudio events
         """
-        if not master_timeline:
+        if not combined_timeline:
             return False
         
         # Find PyAudio events in the master timeline
         pyaudio_events = []
         
         # Check both standalone events and span events
-        for event in master_timeline.get('events', []):
+        for event in combined_timeline.get('events', []):
             if event.get('source') == 'pyaudio':
                 pyaudio_events.append(event['timestamp'])
         
-        for span in master_timeline.get('timeline_spans', []):
+        for span in combined_timeline.get('timeline_spans', []):
             # Check span events for PyAudio events (they're nested in unified spans)
             if 'events' in span:
                 for event in span['events']:

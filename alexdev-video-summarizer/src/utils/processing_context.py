@@ -209,3 +209,11 @@ class VideoProcessingContext:
             'error_count': len(self.processing_metadata['errors']),
             'build_directory': str(self.build_directory)
         }
+    
+    def get_audio_file_path(self) -> Path:
+        """Get path to the main audio file"""
+        return self.build_directory / "audio.wav"
+    
+    def get_audio_analysis_path(self, analysis_type: str) -> Path:
+        """Get path to audio analysis directory or specific analysis file"""
+        return self.build_directory / "audio_analysis" / analysis_type

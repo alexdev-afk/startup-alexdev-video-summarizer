@@ -132,7 +132,7 @@ class VideoProcessingOrchestrator:
             progress_callback('knowledge_generation', {'stage': 'starting'})
             
             # Find the timeline files for knowledge generation
-            audio_timeline_path = context.build_directory / "audio_timelines" / "master_timeline.json"
+            audio_timeline_path = context.build_directory / "audio_timelines" / "combined_audio_timeline.json"
             video_timeline_path = context.build_directory / "video_timelines" 
             
             # Find the most recent video timeline file

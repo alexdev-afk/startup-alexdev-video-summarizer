@@ -4,7 +4,7 @@ InternVL3 Timeline Service
 Vision-Language Model timeline service following the proven 3-stage integration pattern:
 Stage 1: build/video_analysis - Processing metadata and summary statistics only
 Stage 2: build/video_timelines - Semantic timeline events with LLM-ready descriptions  
-Stage 3: master_timeline.json - Multi-service coordination with filtering
+Stage 3: combined_audio_timeline.json - Multi-service coordination with filtering
 
 Replaces YOLO+EasyOCR+OpenCV with a single VLM approach for comprehensive scene understanding:
 - "Person interacts with laptop while speaking"
@@ -526,8 +526,11 @@ class InternVL3TimelineService:
         Creates one event per scene using representative frame + VLM description
         """
         try:
-            # Load frame metadata from PySceneDetect
-            frame_metadata_path = Path("build/bonita/frames/frame_metadata.json")
+            # Extract video name from video_path for dynamic build directory
+            video_name = Path(video_path).stem if '/' in video_path or '\\' in video_path else Path(video_path).name.replace('.mp4', '')
+            
+            # Load frame metadata from PySceneDetect  
+            frame_metadata_path = Path("build") / video_name / "frames" / "frame_metadata.json"
             if not frame_metadata_path.exists():
                 print("[ERROR] No frame metadata found - run PySceneDetect first")
                 logger.error("Frame metadata not found, cannot process scenes")
@@ -690,7 +693,7 @@ class InternVL3TimelineService:
         clean_model_name = self.get_model_name('clean')
         timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M')
         
-        timeline_file = timeline_dir / f'{clean_model_name}_{timestamp}_timeline.json'
+        timeline_file = timeline_dir / f'video_timeline.json'
         
         try:
             # Convert timeline to dictionary format
