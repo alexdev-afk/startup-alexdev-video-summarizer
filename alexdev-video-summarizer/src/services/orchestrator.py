@@ -259,17 +259,18 @@ class VideoProcessingOrchestrator:
             knowledge_file = None
             
             if video_timeline_sources:
+                # Use the first/primary video timeline with original method
+                primary_video_timeline = next(iter(video_timeline_sources.values()))
                 output_path = Path("output") / f"{context.video_name}_knowledge.md"
                 output_path.parent.mkdir(exist_ok=True)
                 
                 with self._suppress_service_logging():
-                    self.knowledge_generator.generate_combined_knowledge(
-                        audio_timeline_path, video_timeline_sources, context.video_name, output_path
+                    self.knowledge_generator.generate_timeline_from_files(
+                        audio_timeline_path, primary_video_timeline, context.video_name, output_path
                     )
                 knowledge_file = output_path
                 
-                sources_summary = ", ".join(video_timeline_sources.keys())
-                logger.info(f"Generated comprehensive knowledge file: {output_path} (sources: {sources_summary})")
+                logger.info(f"Generated knowledge file: {output_path}")
             else:
                 logger.warning("No video timeline sources found for knowledge generation")
             
