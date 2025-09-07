@@ -112,10 +112,11 @@ class PyAudioTimelineService:
             timeline.processing_notes.append(f"Window: {self.window_size}s, Step: {self.step_size}s, Analysis window: {self.analysis_window}s")
             
             # Generate audio events using real pyAudioAnalysis ML models
-            self._detect_enhanced_audio_events(audio_data, sample_rate, timeline)
-            self._detect_enhanced_speaker_changes(audio_data, sample_rate, timeline)
-            self._detect_enhanced_emotion_events(audio_data, sample_rate, timeline)
-            self._detect_enhanced_environment_spans(audio_data, sample_rate, timeline)
+            assert source_tag, "source_tag is required for enhanced timeline generation"
+            self._detect_enhanced_audio_events(audio_data, sample_rate, timeline, source_tag)
+            self._detect_enhanced_speaker_changes(audio_data, sample_rate, timeline, source_tag)
+            self._detect_enhanced_emotion_events(audio_data, sample_rate, timeline, source_tag)
+            self._detect_enhanced_environment_spans(audio_data, sample_rate, timeline, source_tag)
             
             processing_time = time.time() - start_time
             logger.info(f"pyAudioAnalysis enhanced timeline generated: {len(timeline.events)} events, {len(timeline.spans)} spans in {processing_time:.2f}s")
@@ -163,10 +164,11 @@ class PyAudioTimelineService:
             )
             
             # Generate audio events using real pyAudioAnalysis ML models
-            self._detect_audio_events(audio_data, sample_rate, timeline)
-            self._detect_speaker_changes(audio_data, sample_rate, timeline)
-            self._detect_emotion_events(audio_data, sample_rate, timeline)
-            self._detect_environment_spans(audio_data, sample_rate, timeline)
+            service_source = timeline.source or "pyaudio"
+            self._detect_audio_events(audio_data, sample_rate, timeline, service_source)
+            self._detect_speaker_changes(audio_data, sample_rate, timeline, service_source)
+            self._detect_emotion_events(audio_data, sample_rate, timeline, service_source)
+            self._detect_environment_spans(audio_data, sample_rate, timeline, service_source)
             
             processing_time = time.time() - start_time
             logger.info(f"pyAudioAnalysis timeline generated: {len(timeline.events)} events, {len(timeline.spans)} spans in {processing_time:.2f}s")
@@ -184,7 +186,7 @@ class PyAudioTimelineService:
             logger.error(f"pyAudioAnalysis timeline generation failed: {e}")
             return self._create_fallback_timeline(audio_path, error=str(e))
     
-    def _detect_audio_events(self, audio_data: np.ndarray, sample_rate: int, timeline: ServiceTimeline):
+    def _detect_audio_events(self, audio_data: np.ndarray, sample_rate: int, timeline: ServiceTimeline, source_tag: str):
         """
         Detect audio events using real pyAudioAnalysis ML models
         Focus on transient events, music, speech transitions
@@ -224,7 +226,7 @@ class PyAudioTimelineService:
                         timestamp=timestamp,
                         description=event_description,
                         category="transient" if event_type in ['high_frequency_transient', 'noisy_transient', 'low_frequency_impact'] else "environment",
-                        source="pyaudio",
+                        source=source_tag,
                         confidence=confidence,
                         details={
                             "event_type": event_type,
@@ -239,9 +241,9 @@ class PyAudioTimelineService:
             
         except Exception as e:
             logger.warning(f"Audio event detection failed: {e}, using mock events")
-            self._add_mock_audio_events(timeline)
+            self._add_mock_audio_events(timeline, source_tag)
     
-    def _detect_speaker_changes(self, audio_data: np.ndarray, sample_rate: int, timeline: ServiceTimeline):
+    def _detect_speaker_changes(self, audio_data: np.ndarray, sample_rate: int, timeline: ServiceTimeline, source_tag: str):
         """
         Detect speaker changes using real pyAudioAnalysis speaker diarization
         """
@@ -284,7 +286,7 @@ class PyAudioTimelineService:
                         timestamp=timestamps[i],
                         description=f"Speaker change detected - different vocal characteristics",
                         category="speech",
-                        source="pyaudio",
+                        source=source_tag,
                         confidence=min(0.9, 0.5 + feature_change),
                         details={
                             "feature_change_magnitude": float(feature_change),
@@ -299,9 +301,9 @@ class PyAudioTimelineService:
             
         except Exception as e:
             logger.warning(f"Speaker change detection failed: {e}, using mock events")
-            self._add_mock_speaker_events(timeline)
+            self._add_mock_speaker_events(timeline, source_tag)
     
-    def _detect_emotion_events(self, audio_data: np.ndarray, sample_rate: int, timeline: ServiceTimeline):
+    def _detect_emotion_events(self, audio_data: np.ndarray, sample_rate: int, timeline: ServiceTimeline, source_tag: str):
         """
         Detect emotion changes using real pyAudioAnalysis emotion models
         """
@@ -343,7 +345,7 @@ class PyAudioTimelineService:
                         timestamp=timestamp,
                         description=event_description,
                         category="speech",
-                        source="pyaudio",
+                        source=source_tag,
                         confidence=confidence,
                         details={
                             "emotion": emotion,
@@ -359,9 +361,9 @@ class PyAudioTimelineService:
             
         except Exception as e:
             logger.warning(f"Emotion detection failed: {e}, using mock events")
-            self._add_mock_emotion_events(timeline)
+            self._add_mock_emotion_events(timeline, source_tag)
     
-    def _detect_environment_spans(self, audio_data: np.ndarray, sample_rate: int, timeline: ServiceTimeline):
+    def _detect_environment_spans(self, audio_data: np.ndarray, sample_rate: int, timeline: ServiceTimeline, source_tag: str):
         """
         Detect environmental/genre spans using real pyAudioAnalysis genre classification
         """
@@ -410,7 +412,7 @@ class PyAudioTimelineService:
                             end=end_time,
                             description=span_description,
                             category="environment",
-                            source="pyaudio",
+                            source=source_tag,
                             confidence=np.mean([c for g, c in zip(genres[:i], confidences[:i]) if g == current_genre]),
                             details={
                                 "genre": current_genre,
@@ -429,7 +431,7 @@ class PyAudioTimelineService:
                         end=len(audio_data) / sample_rate,
                         description=self._describe_environment_span(current_genre, len(audio_data) / sample_rate - current_start),
                         category="environment",
-                        source="pyaudio",
+                        source=source_tag,
                         confidence=confidences[-1],
                         details={
                             "genre": current_genre,
@@ -442,9 +444,9 @@ class PyAudioTimelineService:
             
         except Exception as e:
             logger.warning(f"Environment span detection failed: {e}, using mock spans")
-            self._add_mock_environment_spans(timeline)
+            self._add_mock_environment_spans(timeline, source_tag)
     
-    def _detect_enhanced_audio_events(self, audio_data: np.ndarray, sample_rate: int, timeline: EnhancedTimeline):
+    def _detect_enhanced_audio_events(self, audio_data: np.ndarray, sample_rate: int, timeline: EnhancedTimeline, source_tag: str):
         """
         Detect audio events using real pyAudioAnalysis ML models for enhanced timeline
         """
@@ -486,7 +488,8 @@ class PyAudioTimelineService:
                             "analysis_type": "audio_event_detection",
                             "window_index": i,
                             "total_detections": len(events_detected)
-                        }
+                        },
+                        source=source_tag
                     )
                     timeline.add_event(event)
                     prev_event = event_type
@@ -495,9 +498,9 @@ class PyAudioTimelineService:
             
         except Exception as e:
             logger.warning(f"Enhanced audio event detection failed: {e}, using mock events")
-            self._add_enhanced_mock_audio_events(timeline)
+            self._add_enhanced_mock_audio_events(timeline, source_tag)
     
-    def _detect_enhanced_speaker_changes(self, audio_data: np.ndarray, sample_rate: int, timeline: EnhancedTimeline):
+    def _detect_enhanced_speaker_changes(self, audio_data: np.ndarray, sample_rate: int, timeline: EnhancedTimeline, source_tag: str):
         """
         Detect speaker changes using real pyAudioAnalysis speaker diarization for enhanced timeline
         """
@@ -539,7 +542,8 @@ class PyAudioTimelineService:
                             "analysis_type": "speaker_diarization",
                             "previous_speaker_features": vocal_features[i-1],
                             "new_speaker_features": vocal_features[i]
-                        }
+                        },
+                        source=source_tag
                     )
                     timeline.add_event(event)
             
@@ -547,9 +551,9 @@ class PyAudioTimelineService:
             
         except Exception as e:
             logger.warning(f"Enhanced speaker change detection failed: {e}, using mock events")
-            self._add_enhanced_mock_speaker_events(timeline)
+            self._add_enhanced_mock_speaker_events(timeline, source_tag)
     
-    def _detect_enhanced_emotion_events(self, audio_data: np.ndarray, sample_rate: int, timeline: EnhancedTimeline):
+    def _detect_enhanced_emotion_events(self, audio_data: np.ndarray, sample_rate: int, timeline: EnhancedTimeline, source_tag: str):
         """
         Detect emotion changes using real pyAudioAnalysis emotion models for enhanced timeline
         """
@@ -591,7 +595,8 @@ class PyAudioTimelineService:
                             "previous_emotion": prev_emotion,
                             "emotion_confidence": float(confidence),
                             "analysis_type": "emotion_detection"
-                        }
+                        },
+                        source=source_tag
                     )
                     timeline.add_event(event)
                     prev_emotion = emotion
@@ -600,9 +605,9 @@ class PyAudioTimelineService:
             
         except Exception as e:
             logger.warning(f"Enhanced emotion detection failed: {e}, using mock events")
-            self._add_enhanced_mock_emotion_events(timeline)
+            self._add_enhanced_mock_emotion_events(timeline, source_tag)
     
-    def _detect_enhanced_environment_spans(self, audio_data: np.ndarray, sample_rate: int, timeline: EnhancedTimeline):
+    def _detect_enhanced_environment_spans(self, audio_data: np.ndarray, sample_rate: int, timeline: EnhancedTimeline, source_tag: str):
         """
         Detect environmental/genre spans using real pyAudioAnalysis genre classification for enhanced timeline
         """
@@ -661,7 +666,8 @@ class PyAudioTimelineService:
                                 "analysis_type": "environment_classification",
                                 "duration": end_time - current_start,
                                 **avg_chars
-                            }
+                            },
+                            source=source_tag
                         )
                         timeline.add_span(span)
                         
@@ -684,7 +690,8 @@ class PyAudioTimelineService:
                             "analysis_type": "environment_classification",
                             "duration": len(audio_data) / sample_rate - current_start,
                             **avg_chars
-                        }
+                        },
+                        source=source_tag
                     )
                     timeline.add_span(final_span)
             
@@ -692,7 +699,7 @@ class PyAudioTimelineService:
             
         except Exception as e:
             logger.warning(f"Enhanced environment span detection failed: {e}, using mock spans")
-            self._add_enhanced_mock_environment_spans(timeline)
+            self._add_enhanced_mock_environment_spans(timeline, source_tag)
     
     def _classify_enhanced_audio_event(self, audio_data: np.ndarray, sample_rate: int) -> Tuple[str, float]:
         """
@@ -803,7 +810,7 @@ class PyAudioTimelineService:
         except:
             return {"energy_level": 0.1, "energy_category": "low"}
     
-    def _add_enhanced_mock_audio_events(self, timeline: EnhancedTimeline):
+    def _add_enhanced_mock_audio_events(self, timeline: EnhancedTimeline, source_tag: str):
         """Add mock audio events when pyAudioAnalysis is not available for enhanced timeline"""
         duration = timeline.total_duration
         
@@ -813,7 +820,8 @@ class PyAudioTimelineService:
                 timestamp=duration * 0.3,
                 event_type="sound_effect",
                 confidence=0.6,
-                details={"mock_mode": True, "analysis_type": "audio_event_detection"}
+                details={"mock_mode": True, "analysis_type": "audio_event_detection"},
+                source=source_tag
             )
             timeline.add_event(event)
         
@@ -822,11 +830,12 @@ class PyAudioTimelineService:
                 timestamp=duration * 0.6,
                 event_type="audio_transition",
                 confidence=0.5,
-                details={"mock_mode": True, "analysis_type": "audio_event_detection"}
+                details={"mock_mode": True, "analysis_type": "audio_event_detection"},
+                source=source_tag
             )
             timeline.add_event(event)
     
-    def _add_enhanced_mock_speaker_events(self, timeline: EnhancedTimeline):
+    def _add_enhanced_mock_speaker_events(self, timeline: EnhancedTimeline, source_tag: str):
         """Add mock speaker change events when analysis is unavailable for enhanced timeline"""
         duration = timeline.total_duration
         
@@ -835,11 +844,12 @@ class PyAudioTimelineService:
                 timestamp=duration * 0.4,
                 event_type="speaker_change",
                 confidence=0.5,
-                details={"mock_mode": True, "analysis_type": "speaker_diarization"}
+                details={"mock_mode": True, "analysis_type": "speaker_diarization"},
+                source=source_tag
             )
             timeline.add_event(event)
     
-    def _add_enhanced_mock_emotion_events(self, timeline: EnhancedTimeline):
+    def _add_enhanced_mock_emotion_events(self, timeline: EnhancedTimeline, source_tag: str):
         """Add mock emotion events when analysis is unavailable for enhanced timeline"""
         duration = timeline.total_duration
         
@@ -848,11 +858,12 @@ class PyAudioTimelineService:
                 timestamp=duration * 0.5,
                 event_type="emotion_change",
                 confidence=0.5,
-                details={"mock_mode": True, "analysis_type": "emotion_detection"}
+                details={"mock_mode": True, "analysis_type": "emotion_detection"},
+                source=source_tag
             )
             timeline.add_event(event)
     
-    def _add_enhanced_mock_environment_spans(self, timeline: EnhancedTimeline):
+    def _add_enhanced_mock_environment_spans(self, timeline: EnhancedTimeline, source_tag: str):
         """Add mock environment spans when analysis is unavailable for enhanced timeline"""
         duration = timeline.total_duration
         
@@ -869,7 +880,8 @@ class PyAudioTimelineService:
                 "analysis_type": "environment_classification",
                 "genre": "speech",
                 "duration": segment_length
-            }
+            },
+            source=source_tag
         )
         timeline.add_span(span1)
         
@@ -884,7 +896,8 @@ class PyAudioTimelineService:
                     "analysis_type": "environment_classification",
                     "genre": "mixed",
                     "duration": duration - segment_length
-                }
+                },
+                source=source_tag
             )
             timeline.add_span(span2)
     
@@ -1105,7 +1118,7 @@ class PyAudioTimelineService:
         }
         return confidences.get(event_type, 0.6)
     
-    def _add_mock_audio_events(self, timeline: ServiceTimeline):
+    def _add_mock_audio_events(self, timeline: ServiceTimeline, source_tag: str):
         """Add mock audio events when pyAudioAnalysis is not available"""
         duration = timeline.total_duration
         
@@ -1115,7 +1128,7 @@ class PyAudioTimelineService:
                 timestamp=duration * 0.3,
                 description="Sound effect detected - attention grabber",
                 category="sfx",
-                source="pyaudio",
+                source=source_tag,
                 confidence=0.6,
                 details={"mock_mode": True, "analysis_type": "audio_event_detection"}
             ))
@@ -1125,12 +1138,12 @@ class PyAudioTimelineService:
                 timestamp=duration * 0.6,
                 description="Audio transition - change in environment",
                 category="environment",
-                source="pyaudio", 
+                source=source_tag, 
                 confidence=0.5,
                 details={"mock_mode": True, "analysis_type": "audio_event_detection"}
             ))
     
-    def _add_mock_speaker_events(self, timeline: ServiceTimeline):
+    def _add_mock_speaker_events(self, timeline: ServiceTimeline, source_tag: str):
         """Add mock speaker change events when analysis is unavailable"""
         duration = timeline.total_duration
         
@@ -1139,12 +1152,12 @@ class PyAudioTimelineService:
                 timestamp=duration * 0.4,
                 description="Speaker change detected - different vocal characteristics",
                 category="speech",
-                source="pyaudio",
+                source=source_tag,
                 confidence=0.5,
                 details={"mock_mode": True, "analysis_type": "speaker_diarization"}
             ))
     
-    def _add_mock_emotion_events(self, timeline: ServiceTimeline):
+    def _add_mock_emotion_events(self, timeline: ServiceTimeline, source_tag: str):
         """Add mock emotion events when analysis is unavailable"""  
         duration = timeline.total_duration
         
@@ -1153,12 +1166,12 @@ class PyAudioTimelineService:
                 timestamp=duration * 0.5,
                 description="Emotional tone shifts from neutral to excited",
                 category="speech",
-                source="pyaudio",
+                source=source_tag,
                 confidence=0.5,
                 details={"mock_mode": True, "analysis_type": "emotion_detection"}
             ))
     
-    def _add_mock_environment_spans(self, timeline: ServiceTimeline):
+    def _add_mock_environment_spans(self, timeline: ServiceTimeline, source_tag: str):
         """Add mock environment spans when analysis is unavailable"""
         duration = timeline.total_duration
         
@@ -1170,7 +1183,7 @@ class PyAudioTimelineService:
             end=segment_length,
             description=f"Speech environment ({segment_length:.1f}s) - clear vocal content",
             category="environment", 
-            source="pyaudio",
+            source=source_tag,
             confidence=0.5,
             details={"mock_mode": True, "analysis_type": "environment_classification"}
         ))
@@ -1181,7 +1194,7 @@ class PyAudioTimelineService:
                 end=duration,
                 description=f"Mixed environment ({duration - segment_length:.1f}s) - varied audio content",
                 category="environment",
-                source="pyaudio",
+                source=source_tag,
                 confidence=0.5,
                 details={"mock_mode": True, "analysis_type": "environment_classification"}
             ))
@@ -1236,10 +1249,11 @@ class PyAudioTimelineService:
         )
         
         # Add basic fallback events and spans
-        self._add_mock_audio_events(timeline)
-        self._add_mock_speaker_events(timeline)
-        self._add_mock_emotion_events(timeline)
-        self._add_mock_environment_spans(timeline)
+        fallback_source = timeline.source or "pyaudio"
+        self._add_mock_audio_events(timeline, fallback_source)
+        self._add_mock_speaker_events(timeline, fallback_source)
+        self._add_mock_emotion_events(timeline, fallback_source)
+        self._add_mock_environment_spans(timeline, fallback_source)
         
         logger.warning(f"Using fallback pyAudioAnalysis timeline: {error or 'pyAudioAnalysis unavailable'}")
         return timeline
@@ -1288,10 +1302,11 @@ class PyAudioTimelineService:
             timeline.processing_notes.append(f"Error: {error}")
         
         # Add basic fallback events and spans
-        self._add_enhanced_mock_audio_events(timeline)
-        self._add_enhanced_mock_speaker_events(timeline)
-        self._add_enhanced_mock_emotion_events(timeline)
-        self._add_enhanced_mock_environment_spans(timeline)
+        fallback_source = "pyaudio"  # Default for enhanced timeline fallback
+        self._add_enhanced_mock_audio_events(timeline, fallback_source)
+        self._add_enhanced_mock_speaker_events(timeline, fallback_source)
+        self._add_enhanced_mock_emotion_events(timeline, fallback_source)
+        self._add_enhanced_mock_environment_spans(timeline, fallback_source)
         
         logger.warning(f"Using fallback pyAudioAnalysis enhanced timeline: {error or 'pyAudioAnalysis unavailable'}")
         return timeline
