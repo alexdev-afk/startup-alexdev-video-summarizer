@@ -90,27 +90,25 @@ class AudioTimelineMergerService:
             all_events = []
             
             for timeline in timelines:
-                # Add all top-level events from this timeline
+                # Add only orphan events (events outside any span) - maintain data structure integrity
                 for event in timeline.events:
                     all_events.append(event)
-                    logger.debug(f"Added top-level event from {timeline.sources_used}: {event.description} at {event.timestamp}s")
+                    logger.debug(f"Added orphan event from {timeline.sources_used}: {event.description} at {event.timestamp}s")
                 
-                # CRITICAL FIX: Also extract events from spans (Whisper timeline stores events in spans)
-                for span in timeline.spans:
-                    for event in span.events:
-                        all_events.append(event)
-                        logger.debug(f"Added span event from {timeline.sources_used}: {event.description} at {event.timestamp}s")
+                # NOTE: Do NOT extract events from spans - this corrupts data structure
+                # Each service maintains independent spans with their events nested inside
+                # Spans are added as complete units below
             
             # Sort events chronologically
             all_events.sort(key=lambda e: e.timestamp)
             combined_timeline.events = all_events
             
-            # CRITICAL FIX: Also collect all spans (Whisper timeline provides speech spans)
+            # Collect all spans as complete units - maintain service independence
             all_spans = []
             for timeline in timelines:
                 for span in timeline.spans:
-                    all_spans.append(span)
-                    logger.debug(f"Added span from {timeline.sources_used}: {span.description} from {span.start}s to {span.end}s")
+                    all_spans.append(span)  # Keep span with its nested events intact
+                    logger.debug(f"Added intact span from {timeline.sources_used}: {span.description} from {span.start}s to {span.end}s")
             
             # Sort spans chronologically
             all_spans.sort(key=lambda s: s.start)

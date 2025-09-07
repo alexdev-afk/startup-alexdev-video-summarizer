@@ -193,7 +193,7 @@ class InternVL3SceneAnalyzer:
     
     def _query_vlm(self, image: Image.Image, prompt: str) -> str:
         """
-        Query the VLM with image and text prompt using real InternVL3 generation
+        Query the VLM with single image and text prompt using real InternVL3 generation
         
         Args:
             image: PIL Image to analyze
@@ -286,6 +286,190 @@ class InternVL3SceneAnalyzer:
             logger.error(f"InternVL3 inference failed: {e}")
             logger.error(f"Traceback: {traceback.format_exc()}")
             return f"VLM analysis unavailable: {str(e)}"
+    
+    def _query_vlm_dual(self, image1: Image.Image, image2: Image.Image, prompt: str) -> str:
+        """
+        Query the VLM with two images for comparison using real InternVL3 generation
+        
+        Args:
+            image1: First PIL Image to analyze
+            image2: Second PIL Image to analyze
+            prompt: Text prompt for dual-image comparison
+            
+        Returns:
+            VLM comparison response as string
+        """
+        try:
+            # Check if real model is loaded
+            if not hasattr(self, 'model') or self.model is None:
+                raise InternVL3TimelineError("InternVL3 model not loaded - cannot perform VLM inference")
+            
+            logger.info(f"Starting dual VLM inference with prompt: {prompt[:50]}...")
+            
+            # Real InternVL3 dual-image inference
+            import torch
+            
+            # Convert both images to InternVL3 format
+            max_input_tiles = self.vlm_config.get('max_input_tiles', 6)
+            logger.debug(f"Max input tiles per image: {max_input_tiles}")
+            
+            # Create image tile list and num_patches_list for BOTH images
+            image_tiles, num_patches_list = [], []
+            transform = build_transform(input_size=self.image_size)
+            
+            # Process BOTH images (this is the key difference from single-image)
+            for i, image in enumerate([image1, image2], 1):
+                logger.debug(f"Processing image {i}/2")
+                
+                if self.model.config.dynamic_image_size:
+                    logger.debug(f"Using dynamic preprocessing for image {i}")
+                    tiles = dynamic_preprocess(
+                        image, 
+                        image_size=self.image_size, 
+                        max_num=max_input_tiles,
+                        use_thumbnail=getattr(self.model.config, 'use_thumbnail', False)
+                    )
+                else:
+                    logger.debug(f"Using single tile preprocessing for image {i}")
+                    tiles = [image]
+                
+                # Add tiles to combined list and track patches per image
+                num_patches_list.append(len(tiles))  # Number of tiles for THIS image
+                image_tiles += tiles  # Add tiles to combined list
+                
+                logger.debug(f"Image {i}: {len(tiles)} tiles")
+            
+            # Transform all tiles to tensors
+            pixel_values = [transform(item) for item in image_tiles]
+            pixel_values = torch.stack(pixel_values).to(self.model.device, dtype=torch.bfloat16)
+            
+            logger.debug(f"Total tiles: {len(image_tiles)}, pixel_values shape: {pixel_values.shape}")
+            logger.debug(f"num_patches_list: {num_patches_list}")
+            
+            # Prepare conversation format with TWO image tokens
+            question = f"<image><image>\n{prompt}"  # Two image tokens for two images
+            history = []  # Empty history for single-turn conversation
+            
+            logger.debug(f"Formatted dual-image question: {question[:100]}...")
+            
+            # Generation config from YAML configuration
+            generation_config = self.vlm_config.get('generation_config', {}).copy()
+            generation_config['max_new_tokens'] = self.max_tokens
+            generation_config['max_length'] = getattr(self.model, 'context_len', 8192)
+            
+            logger.debug(f"Generation config: {generation_config}")
+            
+            # Use InternVL3's chat method with dual images
+            logger.debug("Calling model.chat() with dual images...")
+            response = self.model.chat(
+                tokenizer=self.tokenizer,
+                pixel_values=pixel_values,
+                num_patches_list=num_patches_list,  # [tiles_img1, tiles_img2]
+                question=question,
+                history=history,
+                return_history=False,
+                generation_config=generation_config
+            )
+            
+            logger.debug(f"Raw dual-image response: {response}")
+            
+            # Handle response format
+            if isinstance(response, tuple):
+                response = response[0]  # Take first element if tuple
+            
+            result = str(response).strip()
+            logger.info(f"Dual VLM inference successful: {len(result)} chars")
+            return result
+            
+        except Exception as e:
+            import traceback
+            logger.error(f"InternVL3 dual inference failed: {e}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            return f"Dual VLM analysis unavailable: {str(e)}"
+    
+    def _query_vlm_triple(self, image1: Image.Image, image2: Image.Image, image3: Image.Image, prompt: str) -> str:
+        """
+        Query the VLM with three images for relative comparison
+        
+        Args:
+            image1: First reference image 
+            image2: Middle comparison image
+            image3: Second reference image
+            prompt: Text prompt for triple-image comparison
+            
+        Returns:
+            VLM comparison response as string
+        """
+        try:
+            # Check if real model is loaded
+            if not hasattr(self, 'model') or self.model is None:
+                raise InternVL3TimelineError("InternVL3 model not loaded - cannot perform VLM inference")
+            
+            logger.info(f"Starting triple VLM inference with prompt: {prompt[:50]}...")
+            
+            # Real InternVL3 triple-image inference
+            import torch
+            
+            # Convert all three images to InternVL3 format
+            max_input_tiles = self.vlm_config.get('max_input_tiles', 6)
+            
+            # Create image tile list and num_patches_list for ALL THREE images
+            image_tiles, num_patches_list = [], []
+            transform = build_transform(input_size=self.image_size)
+            
+            # Process ALL THREE images
+            for i, image in enumerate([image1, image2, image3], 1):
+                logger.debug(f"Processing image {i}/3")
+                
+                if self.model.config.dynamic_image_size:
+                    tiles = dynamic_preprocess(
+                        image, 
+                        image_size=self.image_size, 
+                        max_num=max_input_tiles,
+                        use_thumbnail=getattr(self.model.config, 'use_thumbnail', False)
+                    )
+                else:
+                    tiles = [image]
+                
+                # Add tiles to combined list and track patches per image
+                num_patches_list.append(len(tiles))  # Number of tiles for THIS image
+                image_tiles += tiles  # Add tiles to combined list
+            
+            # Convert to tensors
+            pixel_values = torch.stack([transform(tile) for tile in image_tiles]).to(torch.bfloat16).to(self.model.device)
+            
+            # Create prompt with THREE image tokens  
+            question = f"<image><image><image>\n{prompt}"
+            
+            # Generation config from YAML configuration
+            generation_config = self.vlm_config.get('generation_config', {}).copy()
+            generation_config['max_new_tokens'] = self.max_tokens
+            generation_config['max_length'] = getattr(self.model, 'context_len', 8192)
+            
+            logger.debug(f"Generation config: {generation_config}")
+            
+            # Use InternVL3's chat method with triple images
+            logger.debug("Calling model.chat() with triple images...")
+            history = []
+            response = self.model.chat(
+                tokenizer=self.tokenizer,
+                pixel_values=pixel_values,
+                num_patches_list=num_patches_list,  # [patches_img1, patches_img2, patches_img3]
+                question=question,
+                history=history,
+                return_history=False,
+                generation_config=generation_config
+            )
+            
+            result = str(response).strip()
+            logger.info(f"Triple VLM inference successful: {len(result)} chars")
+            return result
+            
+        except Exception as e:
+            import traceback
+            logger.error(f"InternVL3 triple inference failed: {e}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            return f"Triple VLM analysis unavailable: {str(e)}"
     
     
     def _estimate_analysis_confidence(self, analysis_text: str) -> float:
@@ -548,60 +732,63 @@ class InternVL3TimelineService:
             scenes = frame_metadata.get('scenes', {})
             total_scenes = len(scenes)
             
-            # Calculate total frames (3 per scene: first, representative, last)
-            total_frames = total_scenes * 3
+            # Process only representative frames for efficiency (1 per scene)
+            total_frames = total_scenes
             frame_count = 0
             
-            print(f"[VLM] Starting VLM processing: {total_scenes} scenes ({total_frames} frames)")
-            print(f"[VLM] Processing ALL frames: first, representative, last")
-            logger.info(f"Processing {total_frames} frames from {total_scenes} scenes")
+            print(f"[VLM] Starting VLM processing: {total_scenes} scenes ({total_frames} representative frames)")
+            print(f"[VLM] Processing REPRESENTATIVE frames only at scene start timestamps")
+            logger.info(f"Processing {total_frames} representative frames from {total_scenes} scenes")
             
             for scene_key, scene_data in scenes.items():
                 scene_id = scene_data['scene_id']
                 frames = scene_data['frames']
                 
-                print(f"[VLM] Scene {scene_id}/{total_scenes}: Processing 3 frames")
+                frame_count += 1
+                print(f"[VLM] Scene {scene_id}/{total_scenes}: Processing representative frame")
                 
-                # Process all 3 frames: first, representative, last
-                for frame_type in ['first', 'representative', 'last']:
-                    frame_count += 1
-                    frame_info = frames[frame_type]
-                    timestamp = frame_info['timestamp']
-                    frame_path = frame_info['path']
-                    
-                    print(f"[VLM] Frame {frame_count}/{total_frames}: Loading {frame_type} - {frame_path}")
-                    
-                    # Load pre-extracted frame
-                    try:
-                        frame_image = Image.open(frame_path)
-                        print(f"[VLM] Frame {frame_count}/{total_frames}: Frame loaded ({frame_image.size})")
-                    except Exception as e:
-                        print(f"[ERROR] Frame {frame_count}/{total_frames}: Failed to load frame - {e}")
-                        continue
-                    
-                    print(f"[VLM] Frame {frame_count}/{total_frames}: Running VLM analysis...")
-                    
-                    # Analyze with VLM
-                    vlm_description = self._analyze_frame_with_vlm(frame_image, timestamp)
-                    
-                    print(f"[VLM] Frame {frame_count}/{total_frames}: VLM complete ({len(vlm_description)} chars)")
-                    print(f"[VLM]   Description: {vlm_description[:100]}...")
-                    
-                    # Create timeline event
-                    timeline.events.append(TimelineEvent(
-                        timestamp=timestamp,
-                        description=vlm_description,
-                        source=self.service_name,
-                        confidence=0.8,
-                        details={
-                            'analysis_type': 'vlm_frame_analysis',
-                            'scene_id': scene_id,
-                            'frame_type': frame_type,
-                            'scene_duration': scene_data['duration_seconds']
-                        }
-                    ))
-                    
-                    print(f"[VLM] Frame {frame_count}/{total_frames}: Added to timeline\n")
+                # Process only the representative frame
+                frame_info = frames['representative']
+                # Use the scene start timestamp (first frame) for timeline positioning
+                scene_start_timestamp = frames['first']['timestamp'] 
+                representative_frame_path = frame_info['path']
+                
+                print(f"[VLM] Scene {scene_id}/{total_scenes}: Loading representative - {representative_frame_path}")
+                print(f"[VLM] Scene {scene_id}/{total_scenes}: Timeline timestamp: {scene_start_timestamp:.2f}s")
+                
+                # Load pre-extracted representative frame
+                try:
+                    frame_image = Image.open(representative_frame_path)
+                    print(f"[VLM] Scene {scene_id}/{total_scenes}: Frame loaded ({frame_image.size})")
+                except Exception as e:
+                    print(f"[ERROR] Scene {scene_id}/{total_scenes}: Failed to load frame - {e}")
+                    continue
+                
+                print(f"[VLM] Scene {scene_id}/{total_scenes}: Running VLM analysis...")
+                
+                # Analyze representative frame with VLM using scene start timestamp
+                vlm_description = self._analyze_frame_with_vlm(frame_image, scene_start_timestamp)
+                
+                print(f"[VLM] Scene {scene_id}/{total_scenes}: VLM complete ({len(vlm_description)} chars)")
+                print(f"[VLM]   Description: {vlm_description[:80]}...")
+                
+                # Create timeline event at scene start with representative frame description
+                timeline.events.append(TimelineEvent(
+                    timestamp=scene_start_timestamp,  # Scene start timestamp
+                    description=vlm_description,      # Representative frame description
+                    source=self.service_name,
+                    confidence=0.8,
+                    details={
+                        'analysis_type': 'representative_frame_scene_start',
+                        'scene_id': scene_id,
+                        'representative_frame_path': representative_frame_path,
+                        'representative_frame_timestamp': frame_info['timestamp'],
+                        'scene_duration': scene_data['duration_seconds'],
+                        'scene_end_timestamp': frames['last']['timestamp']
+                    }
+                ))
+                
+                print(f"[VLM] Scene {scene_id}/{total_scenes}: Added to timeline at {scene_start_timestamp:.2f}s\n")
                 
         except Exception as e:
             print(f"[ERROR] Frame processing failed: {e}")
@@ -609,20 +796,21 @@ class InternVL3TimelineService:
     
     def _analyze_frame_with_vlm(self, image: Image.Image, timestamp: float) -> str:
         """
-        Analyze single frame with VLM and return description
-        Simple wrapper around scene analyzer
+        Analyze representative frame with VLM using proven single-image description prompt
+        Returns semantic description for institutional knowledge extraction
         """
         try:
             if self.scene_analyzer:
-                analysis = self.scene_analyzer.analyze_comprehensive_scene(image, timestamp, scene_id=1)
-                if analysis and analysis.get('comprehensive_analysis'):
-                    return analysis['comprehensive_analysis']
+                # Use the proven single-image description prompt
+                description_prompt = "Describe what you see in this image. Include the people, setting, objects, and any visible text."
+                description = self.scene_analyzer._query_vlm(image, description_prompt)
+                return description
             
-            return f"Frame at {timestamp:.1f}s - VLM analysis unavailable"
+            return f"Scene at {timestamp:.1f}s - VLM analysis unavailable"
             
         except Exception as e:
             logger.error(f"VLM frame analysis failed at {timestamp:.1f}s: {e}")
-            return f"Frame at {timestamp:.1f}s - analysis failed"
+            return f"Scene at {timestamp:.1f}s - analysis failed"
     
     
     def _get_video_metadata(self, video_path: str) -> Dict[str, Any]:
