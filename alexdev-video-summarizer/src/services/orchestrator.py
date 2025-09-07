@@ -306,13 +306,15 @@ class VideoProcessingOrchestrator:
                                     scene_start = scene_data.get('start_seconds', 0)
                                     
                                     for frame_type, frame_info in scene_data['frames'].items():
-                                        timestamp = frame_info.get('timestamp', scene_start)
-                                        original_name = Path(frame_info.get('path', '')).name
-                                        
-                                        # Format: {MM}m{SS}s_{frame_type}.jpg (e.g., 01m23s_first.jpg)
-                                        m, s = divmod(timestamp, 60)
-                                        new_name = f"{int(m):02d}m{s:05.2f}s_{frame_type}.jpg"
-                                        frame_mapping[original_name] = new_name
+                                        # Only include representative frames (used by VLM)
+                                        if frame_type == 'representative':
+                                            timestamp = frame_info.get('timestamp', scene_start)
+                                            original_name = Path(frame_info.get('path', '')).name
+                                            
+                                            # Format: {MM}m{SS}s.jpg (e.g., 01m23.50s.jpg)
+                                            m, s = divmod(timestamp, 60)
+                                            new_name = f"{int(m):02d}m{s:05.2f}s.jpg"
+                                            frame_mapping[original_name] = new_name
                                         
                         except Exception as e:
                             logger.warning(f"Could not parse frame metadata: {e}")

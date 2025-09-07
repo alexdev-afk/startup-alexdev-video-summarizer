@@ -239,7 +239,7 @@ class VideoProcessorCLI:
                 output_dirs.append(f"- output/{video_name}/")
                 output_dirs.append(f"  ├── {video_name}_knowledge.md")
                 output_dirs.append(f"  ├── {name} (original video)")
-                output_dirs.append(f"  └── frames/ (timestamped frames: 00m12s_first.jpg, etc.)")
+                output_dirs.append(f"  └── frames/ (VLM frames: 00m12.50s.jpg, 01m23.75s.jpg, etc.)")
             
             output_panel = Panel(
                 f"[FILES] [bold]Organized Output Directories Created:[/bold]\n"
