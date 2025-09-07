@@ -81,7 +81,7 @@ class LibROSATimelineService:
             # Load audio data
             audio_data = self._load_audio(audio_path)
             if audio_data is None:
-                return self._create_fallback_enhanced_timeline(audio_path)
+                raise LibROSATimelineError("Failed to load audio file for enhanced LibROSA processing")
             
             # Create enhanced timeline object
             total_duration = len(audio_data) / self.sample_rate
@@ -119,7 +119,7 @@ class LibROSATimelineService:
             
         except Exception as e:
             logger.error(f"LibROSA enhanced timeline generation failed: {e}")
-            return self._create_fallback_enhanced_timeline(audio_path, error=str(e))
+            raise
     
     def generate_timeline(self, audio_path: str) -> ServiceTimeline:
         """
@@ -137,7 +137,7 @@ class LibROSATimelineService:
             # Load audio data
             audio_data = self._load_audio(audio_path)
             if audio_data is None:
-                return self._create_fallback_timeline(audio_path)
+                raise LibROSATimelineError("Failed to load audio file for LibROSA processing")
             
             # Create timeline object
             total_duration = len(audio_data) / self.sample_rate
@@ -167,7 +167,7 @@ class LibROSATimelineService:
             
         except Exception as e:
             logger.error(f"LibROSA timeline generation failed: {e}")
-            return self._create_fallback_timeline(audio_path, error=str(e))
+            raise
     
     def _detect_music_events(self, audio_data: np.ndarray, timeline: ServiceTimeline, source_tag: str):
         """
@@ -175,8 +175,7 @@ class LibROSATimelineService:
         Focus on transitions and moments of change
         """
         if not LIBROSA_AVAILABLE:
-            self._add_mock_music_events(timeline)
-            return
+            raise LibROSATimelineError("LibROSA not available - cannot detect music events")
         
         try:
             # 1. Tempo transitions using beat tracking
@@ -192,8 +191,8 @@ class LibROSATimelineService:
             self._detect_energy_events(audio_data, timeline, source_tag)
             
         except Exception as e:
-            logger.warning(f"Music event detection failed: {e}, using fallback events")
-            self._add_mock_music_events(timeline, source_tag)
+            logger.error(f"Music event detection failed: {e}")
+            raise LibROSATimelineError(f"Music event detection failed: {str(e)}") from e
     
     def _detect_tempo_events(self, audio_data: np.ndarray, timeline: ServiceTimeline, source_tag: str):
         """Detect tempo changes as timeline events"""
@@ -408,8 +407,7 @@ class LibROSATimelineService:
         Focus on coherent musical sections rather than arbitrary time spans
         """
         if not LIBROSA_AVAILABLE:
-            self._add_mock_structural_spans(timeline)
-            return
+            raise LibROSATimelineError("LibROSA not available - cannot detect structural spans")
         
         try:
             # Real structural segmentation using LibROSA
@@ -467,16 +465,15 @@ class LibROSATimelineService:
             logger.debug(f"Detected {len(boundary_times) - 1} structural music segments")
             
         except Exception as e:
-            logger.warning(f"Structural segmentation failed: {e}, using fallback spans")
-            self._add_mock_structural_spans(timeline, source_tag)
+            logger.error(f"Structural segmentation failed: {e}")
+            raise LibROSATimelineError(f"Structural segmentation failed: {str(e)}") from e
     
     def _detect_enhanced_music_events(self, audio_data: np.ndarray, timeline: EnhancedTimeline, source_tag: str):
         """
         Detect musical events using real LibROSA capabilities for enhanced timeline
         """
         if not LIBROSA_AVAILABLE:
-            self._add_enhanced_mock_music_events(timeline)
-            return
+            raise LibROSATimelineError("LibROSA not available - cannot detect enhanced music events")
         
         try:
             # 1. Tempo transitions using beat tracking
@@ -492,8 +489,8 @@ class LibROSATimelineService:
             self._detect_enhanced_energy_events(audio_data, timeline, source_tag)
             
         except Exception as e:
-            logger.warning(f"Enhanced music event detection failed: {e}, using fallback events")
-            self._add_enhanced_mock_music_events(timeline, source_tag)
+            logger.error(f"Enhanced music event detection failed: {e}")
+            raise LibROSATimelineError(f"Enhanced music event detection failed: {str(e)}") from e
     
     def _detect_enhanced_tempo_events(self, audio_data: np.ndarray, timeline: EnhancedTimeline, source_tag: str):
         """Detect tempo changes as enhanced timeline events"""
@@ -700,8 +697,7 @@ class LibROSATimelineService:
         Detect structural music spans using real LibROSA segmentation for enhanced timeline
         """
         if not LIBROSA_AVAILABLE:
-            self._add_enhanced_mock_structural_spans(timeline)
-            return
+            raise LibROSATimelineError("LibROSA not available - cannot detect enhanced structural spans")
         
         try:
             # Real structural segmentation using LibROSA
@@ -758,8 +754,8 @@ class LibROSATimelineService:
             logger.debug(f"Detected {len(boundary_times) - 1} structural music segments")
             
         except Exception as e:
-            logger.warning(f"Enhanced structural segmentation failed: {e}, using fallback spans")
-            self._add_enhanced_mock_structural_spans(timeline, source_tag)
+            logger.error(f"Enhanced structural segmentation failed: {e}")
+            raise LibROSATimelineError(f"Enhanced structural segmentation failed: {str(e)}") from e
     
     def _analyze_segment_characteristics(self, audio_data: np.ndarray, start_time: float, end_time: float) -> Dict[str, Any]:
         """Analyze characteristics of a structural music segment"""
@@ -804,57 +800,7 @@ class LibROSATimelineService:
                 "intensity": "moderate"
             }
     
-    def _add_enhanced_mock_music_events(self, timeline: EnhancedTimeline):
-        """Add mock music events when LibROSA is not available for enhanced timeline"""
-        duration = timeline.total_duration
-        
-        # Add some mock tempo events
-        if duration > 10:
-            event = create_music_event(
-                timestamp=duration * 0.3,
-                event_type="tempo_change",
-                confidence=0.5,
-                details={"mock_mode": True, "analysis_type": "tempo_transition"}
-            )
-            timeline.add_event(event)
-        
-        if duration > 20:
-            event = create_music_event(
-                timestamp=duration * 0.7,
-                event_type="energy_decrease",
-                confidence=0.5,
-                details={"mock_mode": True, "analysis_type": "energy_transition"}
-            )
-            timeline.add_event(event)
     
-    def _add_enhanced_mock_structural_spans(self, timeline: EnhancedTimeline, source_tag: str):
-        """Add mock structural spans when LibROSA is not available for enhanced timeline"""
-        duration = timeline.total_duration
-        
-        # Create simple structural segments
-        segment_length = duration / 3
-        
-        for i in range(3):
-            start_time = i * segment_length
-            end_time = min((i + 1) * segment_length, duration)
-            
-            span_type = "opening" if i == 0 else ("middle" if i == 1 else "closing")
-            
-            span = create_music_span(
-                start=start_time,
-                end=end_time,
-                span_type=span_type,
-                confidence=0.5,
-                details={
-                    "mock_mode": True, 
-                    "analysis_type": "structural_segment",
-                    "duration": end_time - start_time,
-                    "texture": "mixed",
-                    "intensity": "moderate"
-                },
-                source=source_tag
-            )
-            timeline.add_span(span)
     
     def _characterize_onset(self, audio_data: np.ndarray, onset_time: float) -> str:
         """Characterize a musical onset based on surrounding context"""
@@ -946,58 +892,7 @@ class LibROSATimelineService:
             duration = end_time - start_time
             return f"Musical section ({duration:.1f}s)"
     
-    def _add_mock_music_events(self, timeline: ServiceTimeline, source_tag: str):
-        """Add mock music events when LibROSA is not available"""
-        duration = timeline.total_duration
-        
-        # Add some mock tempo events
-        if duration > 10:
-            timeline.add_event(TimelineEvent(
-                timestamp=duration * 0.3,
-                description="Tempo builds, increasing excitement",
-                category="transition",
-                source=source_tag,
-                confidence=0.5,
-                details={"mock_mode": True, "analysis_type": "tempo_transition"}
-            ))
-        
-        if duration > 20:
-            timeline.add_event(TimelineEvent(
-                timestamp=duration * 0.7,
-                description="Energy decrease, calming dynamics",
-                category="transition", 
-                source=source_tag,
-                confidence=0.5,
-                details={"mock_mode": True, "analysis_type": "energy_transition"}
-            ))
     
-    def _add_mock_structural_spans(self, timeline: ServiceTimeline, source_tag: str):
-        """Add mock structural spans when LibROSA is not available"""
-        duration = timeline.total_duration
-        
-        # Create simple structural segments
-        segment_length = duration / 3
-        
-        for i in range(3):
-            start_time = i * segment_length
-            end_time = min((i + 1) * segment_length, duration)
-            
-            if i == 0:
-                description = f"Opening musical section ({end_time - start_time:.1f}s) - building energy"
-            elif i == 1:
-                description = f"Middle section ({end_time - start_time:.1f}s) - sustained intensity"
-            else:
-                description = f"Closing section ({end_time - start_time:.1f}s) - resolution"
-            
-            timeline.add_span(TimelineSpan(
-                start=start_time,
-                end=end_time,
-                description=description,
-                category="music",
-                source=source_tag,
-                confidence=0.5,
-                details={"mock_mode": True, "analysis_type": "structural_segment"}
-            ))
     
     def _load_audio(self, audio_path: str) -> Optional[np.ndarray]:
         """Load audio file using LibROSA"""
@@ -1013,30 +908,6 @@ class LibROSATimelineService:
             logger.error(f"Audio loading failed: {e}")
             return None
     
-    def _create_fallback_timeline(self, audio_path: str, error: Optional[str] = None) -> ServiceTimeline:
-        """Create fallback timeline when processing fails"""
-        # Estimate duration from file info or use default
-        try:
-            from pathlib import Path
-            file_size = Path(audio_path).stat().st_size
-            # Rough estimate: 44.1 kHz * 16-bit * mono = ~88KB per second
-            estimated_duration = file_size / 88000
-        except:
-            estimated_duration = 30.0  # Default fallback
-        
-        timeline = ServiceTimeline(
-            source="librosa",
-            audio_file=str(audio_path),
-            total_duration=estimated_duration
-        )
-        
-        # Add basic fallback events
-        fallback_source = timeline.source or "librosa"
-        self._add_mock_music_events(timeline, fallback_source)
-        self._add_mock_structural_spans(timeline, fallback_source)
-        
-        logger.warning(f"Using fallback LibROSA timeline: {error or 'LibROSA unavailable'}")
-        return timeline
     
     def _save_timeline(self, timeline: ServiceTimeline, audio_path: str, source_tag: Optional[str] = None):
         """Save timeline to file"""
@@ -1056,37 +927,6 @@ class LibROSATimelineService:
         except Exception as e:
             logger.error(f"Failed to save LibROSA timeline: {e}")
     
-    def _create_fallback_enhanced_timeline(self, audio_path: str, error: Optional[str] = None) -> EnhancedTimeline:
-        """Create fallback enhanced timeline when processing fails"""
-        # Estimate duration from file info or use default
-        try:
-            from pathlib import Path
-            file_size = Path(audio_path).stat().st_size
-            # Rough estimate: 44.1 kHz * 16-bit * mono = ~88KB per second
-            estimated_duration = file_size / 88000
-        except:
-            estimated_duration = 30.0  # Default fallback
-        
-        timeline = EnhancedTimeline(
-            audio_file=str(audio_path),
-            total_duration=estimated_duration
-        )
-        
-        # Add LibROSA to sources used
-        timeline.sources_used.append("librosa")
-        
-        # Add fallback processing notes
-        timeline.processing_notes.append(f"LibROSA fallback mode - sample_rate: {self.sample_rate}")
-        if error:
-            timeline.processing_notes.append(f"Error: {error}")
-        
-        # Add basic fallback events and spans
-        fallback_source = "librosa"  # Default for enhanced timeline fallback
-        self._add_enhanced_mock_music_events(timeline, fallback_source)
-        self._add_enhanced_mock_structural_spans(timeline, fallback_source)
-        
-        logger.warning(f"Using fallback LibROSA enhanced timeline: {error or 'LibROSA unavailable'}")
-        return timeline
     
     def _save_intermediate_analysis(self, timeline: EnhancedTimeline, audio_path: str, audio_data: np.ndarray, source_tag: Optional[str] = None):
         """Save intermediate analysis files to audio_analysis directory"""
