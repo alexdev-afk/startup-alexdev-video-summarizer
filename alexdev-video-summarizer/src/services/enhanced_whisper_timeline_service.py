@@ -62,9 +62,9 @@ class EnhancedWhisperTimelineService:
             WhisperError: If transcription fails
         """
         # Delegate to generate_and_save without saving
-        return self._generate_timeline_internal(audio_path, scene_info)
+        return self._generate_timeline_internal(audio_path, scene_info, "whisper")
     
-    def _generate_timeline_internal(self, audio_path: Path, scene_info: Optional[Dict] = None) -> EnhancedTimeline:
+    def _generate_timeline_internal(self, audio_path: Path, scene_info: Optional[Dict] = None, source_tag: str = "whisper") -> EnhancedTimeline:
         """Internal method for timeline generation"""
         audio_path = Path(audio_path) if isinstance(audio_path, str) else audio_path
         logger.info(f"Generating enhanced Whisper timeline: {audio_path.name}")
@@ -74,7 +74,7 @@ class EnhancedWhisperTimelineService:
             whisper_result = self.whisper_service.transcribe_audio(audio_path, scene_info)
             
             # Create enhanced timeline first
-            timeline = self._create_enhanced_timeline(whisper_result, audio_path)
+            timeline = self._create_enhanced_timeline(whisper_result, audio_path, source_tag)
             
             return timeline
             
@@ -82,7 +82,7 @@ class EnhancedWhisperTimelineService:
             logger.error(f"Enhanced timeline generation failed: {e}")
             raise WhisperError(f"Enhanced timeline generation failed: {str(e)}") from e
     
-    def _create_enhanced_timeline(self, whisper_result: Dict[str, Any], audio_path: Path) -> EnhancedTimeline:
+    def _create_enhanced_timeline(self, whisper_result: Dict[str, Any], audio_path: Path, source_tag: str = "whisper") -> EnhancedTimeline:
         """Create enhanced timeline from whisper result"""
         # Extract global data
         total_duration = self._extract_duration(whisper_result)
@@ -198,7 +198,7 @@ class EnhancedWhisperTimelineService:
             combined_text = ' '.join(combined_text_parts).strip()
             
             # Create speech span for the entire VAD region 
-            speech_span = create_speech_span(min_start, max_end, combined_text, primary_speaker, final_confidence)
+            speech_span = create_speech_span(min_start, max_end, combined_text, primary_speaker, final_confidence, source_tag)
             
             # Add all word events within this span
             if self.generate_word_events:
@@ -215,7 +215,7 @@ class EnhancedWhisperTimelineService:
                         continue
                     
                     # Use primary speaker for all words in this VAD region for consistency
-                    word_event = create_word_event(word_timestamp, word_text, word_confidence, primary_speaker)
+                    word_event = create_word_event(word_timestamp, word_text, word_confidence, primary_speaker, source_tag)
                     
                     try:
                         speech_span.add_event(word_event, is_first_span=is_first_span, is_last_span=is_last_span)
@@ -229,7 +229,7 @@ class EnhancedWhisperTimelineService:
                 previous_speaker is not None and 
                 primary_speaker != previous_speaker):
                 
-                speaker_event = create_speaker_change_event(min_start, previous_speaker, primary_speaker)
+                speaker_event = create_speaker_change_event(min_start, previous_speaker, primary_speaker, source_tag)
                 speech_span.add_event(speaker_event, is_first_span=is_first_span, is_last_span=is_last_span)
             
             timeline.add_span(speech_span)
@@ -258,7 +258,7 @@ class EnhancedWhisperTimelineService:
                 continue
             
             # Create word event
-            word_event = create_word_event(word_timestamp, word_text, word_confidence, speaker)
+            word_event = create_word_event(word_timestamp, word_text, word_confidence, speaker, source_tag)
             
             try:
                 span.add_event(word_event, is_first_span=is_first_span, is_last_span=is_last_span)
@@ -337,7 +337,7 @@ class EnhancedWhisperTimelineService:
             whisper_result = self.whisper_service.transcribe_audio(audio_path, scene_info)
             
             # Create enhanced timeline
-            timeline = self._create_enhanced_timeline(whisper_result, audio_path)
+            timeline = self._create_enhanced_timeline(whisper_result, audio_path, source_tag or "whisper")
             
             # Save intermediate analysis file for auditing with timeline data
             self._save_intermediate_analysis(Path(audio_path), whisper_result, timeline, source_tag)

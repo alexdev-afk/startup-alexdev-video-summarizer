@@ -262,13 +262,13 @@ class EnhancedTimeline:
 
 
 # Utility functions for service integration
-def create_speech_span(start: float, end: float, text: str, speaker: str, confidence: float) -> TimelineSpan:
-    """Create a speech span from Whisper data"""
+def create_speech_span(start: float, end: float, text: str, speaker: str, confidence: float, source: str = "whisper") -> TimelineSpan:
+    """Create a speech span with configurable source"""
     span = TimelineSpan(
         start=start,
         end=end,
         description="Speech",
-        source="whisper",
+        source=source,
         confidence=confidence,
         details={
             "text": text, 
@@ -280,23 +280,23 @@ def create_speech_span(start: float, end: float, text: str, speaker: str, confid
     return span
 
 
-def create_word_event(timestamp: float, word: str, confidence: float, speaker: str) -> TimelineEvent:
-    """Create a word event from Whisper word data"""
+def create_word_event(timestamp: float, word: str, confidence: float, speaker: str, source: str = "whisper") -> TimelineEvent:
+    """Create a word event with configurable source"""
     return TimelineEvent(
         timestamp=timestamp,
         description="Word",
-        source="whisper", 
+        source=source, 
         confidence=confidence,
         details={"word": word, "speaker": speaker}
     )
 
 
-def create_speaker_change_event(timestamp: float, prev_speaker: str, new_speaker: str) -> TimelineEvent:
-    """Create a speaker change event"""
+def create_speaker_change_event(timestamp: float, prev_speaker: str, new_speaker: str, source: str = "whisper") -> TimelineEvent:
+    """Create a speaker change event with configurable source"""
     return TimelineEvent(
         timestamp=timestamp,
         description="Speaker Change",
-        source="whisper",
+        source=source,
         confidence=0.85,
         details={"previous_speaker": prev_speaker, "new_speaker": new_speaker}
     )
