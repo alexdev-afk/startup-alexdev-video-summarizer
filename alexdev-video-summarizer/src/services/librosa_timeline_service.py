@@ -21,7 +21,7 @@ except ImportError:
 
 from utils.logger import get_logger
 from utils.timeline_schema import ServiceTimeline, TimelineEvent, TimelineSpan
-from utils.enhanced_timeline_schema import EnhancedTimeline, create_music_event, create_music_span
+from utils.enhanced_timeline_schema import EnhancedTimeline, create_librosa_event, create_librosa_span
 
 logger = get_logger(__name__)
 
@@ -81,7 +81,7 @@ class LibROSATimelineService:
             # Load audio data
             audio_data = self._load_audio(audio_path)
             if audio_data is None:
-                raise LibROSATimelineError("Failed to load audio file for enhanced LibROSA processing")
+                raise LibROSATimelineError("Failed to load audio file for LibROSA processing")
             
             # Create enhanced timeline object
             total_duration = len(audio_data) / self.sample_rate
@@ -98,12 +98,12 @@ class LibROSATimelineService:
             timeline.processing_notes.append(f"Audio frames: {len(audio_data)}, analysis completed")
             
             # Generate music events using real LibROSA analysis
-            assert source_tag, "source_tag is required for enhanced timeline generation"
-            self._detect_enhanced_music_events(audio_data, timeline, source_tag)
-            self._detect_enhanced_structural_spans(audio_data, timeline, source_tag)
+            assert source_tag, "source_tag is required for timeline generation"
+            self._detect_librosa_music_events(audio_data, timeline, source_tag)
+            self._detect_librosa_structural_spans(audio_data, timeline, source_tag)
             
             processing_time = time.time() - start_time
-            logger.info(f"LibROSA enhanced timeline generated: {len(timeline.events)} events, {len(timeline.spans)} spans in {processing_time:.2f}s")
+            logger.info(f"LibROSA timeline generated: {len(timeline.events)} events, {len(timeline.spans)} spans in {processing_time:.2f}s")
             
             # Save intermediate analysis files before cleanup
             self._save_intermediate_analysis(timeline, audio_path, audio_data, source_tag)
@@ -140,9 +140,10 @@ class LibROSATimelineService:
                 raise LibROSATimelineError("Failed to load audio file for LibROSA processing")
             
             # Create timeline object
+            assert source_tag, f"source_tag is required, got: {source_tag}"
             total_duration = len(audio_data) / self.sample_rate
             timeline = ServiceTimeline(
-                source="librosa",
+                source=source_tag,
                 audio_file=str(audio_path),
                 total_duration=total_duration
             )
@@ -468,7 +469,7 @@ class LibROSATimelineService:
             logger.error(f"Structural segmentation failed: {e}")
             raise LibROSATimelineError(f"Structural segmentation failed: {str(e)}") from e
     
-    def _detect_enhanced_music_events(self, audio_data: np.ndarray, timeline: EnhancedTimeline, source_tag: str):
+    def _detect_librosa_music_events(self, audio_data: np.ndarray, timeline: EnhancedTimeline, source_tag: str):
         """
         Detect musical events using real LibROSA capabilities for enhanced timeline
         """
@@ -477,23 +478,39 @@ class LibROSATimelineService:
         
         try:
             # 1. Tempo transitions using beat tracking
-            self._detect_enhanced_tempo_events(audio_data, timeline, source_tag)
+            self._detect_librosa_tempo_events(audio_data, timeline, source_tag)
             
             # 2. Musical onsets and rhythm changes
-            self._detect_enhanced_onset_events(audio_data, timeline, source_tag)
+            self._detect_librosa_onset_events(audio_data, timeline, source_tag)
             
             # 3. Harmonic/key transitions using chroma analysis
-            self._detect_enhanced_harmonic_events(audio_data, timeline, source_tag)
+            self._detect_librosa_harmonic_events(audio_data, timeline, source_tag)
             
             # 4. Energy/volume transitions
-            self._detect_enhanced_energy_events(audio_data, timeline, source_tag)
+            self._detect_librosa_energy_events(audio_data, timeline, source_tag)
             
         except Exception as e:
             logger.error(f"Enhanced music event detection failed: {e}")
             raise LibROSATimelineError(f"Enhanced music event detection failed: {str(e)}") from e
     
-    def _detect_enhanced_tempo_events(self, audio_data: np.ndarray, timeline: EnhancedTimeline, source_tag: str):
-        """Detect tempo changes as enhanced timeline events"""
+    def _detect_librosa_tempo_events(self, audio_data: np.ndarray, timeline: EnhancedTimeline, source_tag: str):
+        """
+        TEMPO CHANGE DETECTION - Musical Transition Events
+        
+        Detects significant changes in musical tempo/BPM using LibROSA beat tracking.
+        
+        Event Detection Logic:
+        - Analyzes audio in sliding windows (5s window, 2.5s step)
+        - Uses librosa.beat.beat_track() to estimate tempo in each window
+        - Compares consecutive tempo measurements
+        - Triggers event when tempo change exceeds threshold (default: 10 BPM)
+        
+        Detected Events:
+        - "tempo_change": Musical tempo shifts (e.g., 120 BPM → 140 BPM)
+        - Confidence: Higher for larger tempo changes (0.6-0.95 range)
+        
+        Use Cases: Advertisement music transitions, song structure changes, tempo modulation
+        """
         try:
             # Analyze tempo over sliding windows
             window_samples = int(self.analysis_window * self.sample_rate)
@@ -518,7 +535,7 @@ class LibROSATimelineService:
                 
                 if tempo_change > self.tempo_change_threshold:
                     # Create enhanced tempo change event
-                    event = create_music_event(
+                    event = create_librosa_event(
                         timestamp=timestamps[i],
                         event_type="tempo_change",
                         confidence=min(0.95, 0.6 + (tempo_change / 20.0)),
@@ -537,8 +554,26 @@ class LibROSATimelineService:
         except Exception as e:
             logger.warning(f"Enhanced tempo event detection failed: {e}")
     
-    def _detect_enhanced_onset_events(self, audio_data: np.ndarray, timeline: EnhancedTimeline, source_tag: str):
-        """Detect significant musical onsets as enhanced events"""
+    def _detect_librosa_onset_events(self, audio_data: np.ndarray, timeline: EnhancedTimeline, source_tag: str):
+        """
+        MUSICAL ONSET DETECTION - Rhythmic Event Marking
+        
+        Detects significant musical onsets (attack points) using LibROSA onset detection.
+        
+        Event Detection Logic:
+        - Uses librosa.onset.onset_detect() to find attack points in audio
+        - Filters for strongest onsets using onset_strength analysis  
+        - Applies energy threshold filtering to avoid timeline clutter
+        - Limits to strongest 15 onsets to focus on major musical events
+        - Characterizes each onset by spectral/energy properties
+        
+        Detected Events:
+        - "musical_onset": Significant rhythmic/musical attack points
+        - Event descriptions vary by characteristics (e.g., "Sharp percussive hit", "Gentle melodic emphasis")
+        - Confidence: 0.75 (consistent across all detected onsets)
+        
+        Use Cases: Beat marking, musical phrase boundaries, percussive accents, instrumental entries
+        """
         try:
             # Real onset detection using LibROSA
             onset_frames = librosa.onset.onset_detect(
@@ -576,7 +611,7 @@ class LibROSATimelineService:
                     # Characterize onset
                     onset_character = self._characterize_onset(audio_data, onset_time)
                     
-                    event = create_music_event(
+                    event = create_librosa_event(
                         timestamp=float(onset_time),
                         event_type="musical_onset",
                         confidence=0.75,
@@ -595,8 +630,25 @@ class LibROSATimelineService:
         except Exception as e:
             logger.warning(f"Enhanced onset event detection failed: {e}")
     
-    def _detect_enhanced_harmonic_events(self, audio_data: np.ndarray, timeline: EnhancedTimeline, source_tag: str):
-        """Detect harmonic/key changes as enhanced events"""
+    def _detect_librosa_harmonic_events(self, audio_data: np.ndarray, timeline: EnhancedTimeline, source_tag: str):
+        """
+        HARMONIC/KEY CHANGE DETECTION - Musical Transition Analysis
+        
+        Detects changes in harmonic content and musical key using LibROSA chroma analysis.
+        
+        Event Detection Logic:
+        - Uses librosa.feature.chroma_cqt() to extract chromagram features
+        - Analyzes chroma in sliding windows (5s window, 2.5s step)
+        - Identifies dominant pitch class in each window (simplified key detection)
+        - Triggers event when dominant pitch class changes between windows
+        - Maps pitch classes to musical key names (C, C#, D, etc.)
+        
+        Detected Events:
+        - "harmonic_shift": Key/tonal center changes (e.g., "C → G tonality")
+        - Confidence: 0.65 (moderate due to simplified key detection method)
+        
+        Use Cases: Song section transitions, key modulation, chord progressions, tonal shifts
+        """
         try:
             # Real chroma analysis for harmonic content
             chroma = librosa.feature.chroma_cqt(y=audio_data, sr=self.sample_rate)
@@ -627,7 +679,7 @@ class LibROSATimelineService:
                     old_key = pitch_names[key_profiles[i-1]]
                     new_key = pitch_names[key_profiles[i]]
                     
-                    event = create_music_event(
+                    event = create_librosa_event(
                         timestamp=timestamps[i],
                         event_type="harmonic_shift",
                         confidence=0.65,
@@ -646,8 +698,26 @@ class LibROSATimelineService:
         except Exception as e:
             logger.warning(f"Enhanced harmonic event detection failed: {e}")
     
-    def _detect_enhanced_energy_events(self, audio_data: np.ndarray, timeline: EnhancedTimeline, source_tag: str):
-        """Detect energy/volume transitions as enhanced events"""
+    def _detect_librosa_energy_events(self, audio_data: np.ndarray, timeline: EnhancedTimeline, source_tag: str):
+        """
+        ENERGY/VOLUME TRANSITION DETECTION - Dynamic Change Analysis
+        
+        Detects significant changes in audio energy/volume using LibROSA RMS analysis.
+        
+        Event Detection Logic:
+        - Uses librosa.feature.rms() to compute RMS energy over time
+        - Applies Savitzky-Golay filter for noise reduction and trend detection
+        - Compares frame-to-frame energy changes against dynamic threshold
+        - Threshold = standard deviation of smoothed RMS * energy_change_threshold (0.5)
+        - Classifies changes as energy increases or decreases
+        
+        Detected Events:
+        - "energy_increase": Volume/intensity building (e.g., musical crescendo)
+        - "energy_decrease": Volume/intensity reduction (e.g., musical diminuendo)
+        - Confidence: 0.7 (consistent across all energy transitions)
+        
+        Use Cases: Musical dynamics, volume automation, crescendos/diminuendos, quiet/loud transitions
+        """
         try:
             # Real RMS energy analysis
             rms_energy = librosa.feature.rms(y=audio_data, frame_length=self.n_fft, hop_length=self.hop_length)[0]
@@ -673,7 +743,7 @@ class LibROSATimelineService:
                     else:
                         event_type = "energy_decrease"
                     
-                    event = create_music_event(
+                    event = create_librosa_event(
                         timestamp=float(rms_times[i]),
                         event_type=event_type,
                         confidence=0.7,
@@ -692,9 +762,25 @@ class LibROSATimelineService:
         except Exception as e:
             logger.warning(f"Enhanced energy event detection failed: {e}")
     
-    def _detect_enhanced_structural_spans(self, audio_data: np.ndarray, timeline: EnhancedTimeline, source_tag: str):
+    def _detect_librosa_structural_spans(self, audio_data: np.ndarray, timeline: EnhancedTimeline, source_tag: str):
         """
-        Detect structural music spans using real LibROSA segmentation for enhanced timeline
+        STRUCTURAL SEGMENTATION - Musical Section Detection
+        
+        Detects coherent musical sections using LibROSA's structural analysis algorithms.
+        
+        Event Detection Logic:
+        - Uses librosa.feature.chroma_cqt() to extract harmonic content features
+        - Creates recurrence matrix with cosine similarity for structure detection
+        - Applies agglomerative clustering to identify segment boundaries (k=5 segments)
+        - Falls back to time-based segmentation if clustering fails
+        - Analyzes each segment's characteristics: tempo, energy, spectral properties
+        
+        Detected Spans:
+        - "structural_segment": Musical sections with consistent characteristics
+        - Span descriptions include texture, energy level, duration, and tempo
+        - Confidence: 0.8 (high confidence due to robust segmentation method)
+        
+        Use Cases: Song structure analysis (verse/chorus), advertisement sections, musical movements
         """
         if not LIBROSA_AVAILABLE:
             raise LibROSATimelineError("LibROSA not available - cannot detect enhanced structural spans")
@@ -736,7 +822,7 @@ class LibROSATimelineService:
                     audio_data, start_time, end_time
                 )
                 
-                span = create_music_span(
+                span = create_librosa_span(
                     start=start_time,
                     end=end_time,
                     span_type="structural_segment",

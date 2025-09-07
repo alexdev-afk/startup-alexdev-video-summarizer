@@ -32,7 +32,7 @@ PYAUDIOANALYSIS_AVAILABLE = PYAUDIOANALYSIS_FULL and SCIPY_AVAILABLE
 
 from utils.logger import get_logger
 from utils.timeline_schema import ServiceTimeline, TimelineEvent, TimelineSpan
-from utils.enhanced_timeline_schema import EnhancedTimeline, create_audio_event, create_audio_span
+from utils.enhanced_timeline_schema import EnhancedTimeline, create_pyaudio_event, create_pyaudio_span
 
 logger = get_logger(__name__)
 
@@ -95,7 +95,7 @@ class PyAudioTimelineService:
             # Load audio data
             audio_data, sample_rate = self._load_audio(audio_path)
             if audio_data is None:
-                raise PyAudioTimelineError("Failed to load audio file for enhanced pyAudioAnalysis processing")
+                raise PyAudioTimelineError("Failed to load audio file for pyAudioAnalysis processing")
             
             # Create enhanced timeline object
             total_duration = len(audio_data) / sample_rate
@@ -112,14 +112,14 @@ class PyAudioTimelineService:
             timeline.processing_notes.append(f"Window: {self.window_size}s, Step: {self.step_size}s, Analysis window: {self.analysis_window}s")
             
             # Generate audio events using real pyAudioAnalysis ML models
-            assert source_tag, "source_tag is required for enhanced timeline generation"
-            self._detect_enhanced_audio_events(audio_data, sample_rate, timeline, source_tag)
-            self._detect_enhanced_speaker_changes(audio_data, sample_rate, timeline, source_tag)
-            self._detect_enhanced_emotion_events(audio_data, sample_rate, timeline, source_tag)
-            self._detect_enhanced_environment_spans(audio_data, sample_rate, timeline, source_tag)
+            assert source_tag, "source_tag is required for timeline generation"
+            self._detect_pyaudio_audio_events(audio_data, sample_rate, timeline, source_tag)
+            self._detect_pyaudio_speaker_changes(audio_data, sample_rate, timeline, source_tag)
+            self._detect_pyaudio_speaker_emotion_events(audio_data, sample_rate, timeline, source_tag)
+            self._detect_pyaudio_environment_spans(audio_data, sample_rate, timeline, source_tag)
             
             processing_time = time.time() - start_time
-            logger.info(f"pyAudioAnalysis enhanced timeline generated: {len(timeline.events)} events, {len(timeline.spans)} spans in {processing_time:.2f}s")
+            logger.info(f"pyAudioAnalysis timeline generated: {len(timeline.events)} events, {len(timeline.spans)} spans in {processing_time:.2f}s")
             
             # Save intermediate analysis files
             self._save_intermediate_analysis(timeline, audio_path, audio_data, sample_rate, source_tag)
@@ -156,9 +156,10 @@ class PyAudioTimelineService:
                 raise PyAudioTimelineError("Failed to load audio file for pyAudioAnalysis processing")
             
             # Create timeline object
+            assert source_tag, f"source_tag is required, got: {source_tag}"
             total_duration = len(audio_data) / sample_rate
             timeline = ServiceTimeline(
-                source="pyaudio",
+                source=source_tag,
                 audio_file=str(audio_path),
                 total_duration=total_duration
             )
@@ -442,9 +443,28 @@ class PyAudioTimelineService:
             logger.error(f"Environment span detection failed: {e}")
             raise PyAudioTimelineError(f"Environment span detection failed: {str(e)}") from e
     
-    def _detect_enhanced_audio_events(self, audio_data: np.ndarray, sample_rate: int, timeline: EnhancedTimeline, source_tag: str):
+    def _detect_pyaudio_audio_events(self, audio_data: np.ndarray, sample_rate: int, timeline: EnhancedTimeline, source_tag: str):
         """
-        Detect audio events using real pyAudioAnalysis ML models for enhanced timeline
+        AUDIO EVENT CLASSIFICATION - Sound Type Detection
+        
+        Classifies different types of audio content using pyAudioAnalysis feature extraction.
+        
+        Event Detection Logic:
+        - Analyzes audio in sliding windows (3s window, 1.5s step)
+        - Extracts 68 acoustic features per window using pyAudioAnalysis
+        - Classifies audio based on energy, spectral, and temporal characteristics
+        - Uses configurable thresholds for multi-class sound classification
+        - Triggers events only when audio type changes between windows
+        
+        Detected Events:
+        - "high_frequency_transient": High-energy, bright sounds (0.8 confidence)
+        - "noisy_transient": High-energy, noisy sounds (0.75 confidence)
+        - "low_frequency_impact": Medium-energy, bass-heavy sounds (0.7 confidence)  
+        - "speech": Human vocal content (0.75 confidence)
+        - "music": Musical content (0.7 confidence)
+        - "background": Low-energy ambient sound (0.5 confidence)
+        
+        Use Cases: Content type identification, speech/music segmentation, sound effect detection
         """
         if not PYAUDIOANALYSIS_AVAILABLE:
             raise PyAudioTimelineError("pyAudioAnalysis not available - cannot detect enhanced audio events")
@@ -464,7 +484,7 @@ class PyAudioTimelineService:
                 timestamp = start_idx / sample_rate
                 
                 # Detect specific audio events in this window
-                event_type, confidence = self._classify_enhanced_audio_event(window_audio, sample_rate)
+                event_type, confidence = self._classify_pyaudio_audio_event(window_audio, sample_rate)
                 
                 if event_type != 'background':
                     events_detected.append(event_type)
@@ -475,7 +495,7 @@ class PyAudioTimelineService:
             prev_event = None
             for i, (event_type, timestamp, confidence) in enumerate(zip(events_detected, timestamps, confidences)):
                 if event_type != prev_event:  # Event change detected
-                    event = create_audio_event(
+                    event = create_pyaudio_event(
                         timestamp=timestamp,
                         event_type=event_type,
                         confidence=confidence,
@@ -495,9 +515,25 @@ class PyAudioTimelineService:
             logger.error(f"Enhanced audio event detection failed: {e}")
             raise PyAudioTimelineError(f"Enhanced audio event detection failed: {str(e)}") from e
     
-    def _detect_enhanced_speaker_changes(self, audio_data: np.ndarray, sample_rate: int, timeline: EnhancedTimeline, source_tag: str):
+    def _detect_pyaudio_speaker_changes(self, audio_data: np.ndarray, sample_rate: int, timeline: EnhancedTimeline, source_tag: str):
         """
-        Detect speaker changes using real pyAudioAnalysis speaker diarization for enhanced timeline
+        SPEAKER DIARIZATION - Voice Change Detection
+        
+        Detects changes in speaker identity using vocal characteristic analysis.
+        
+        Event Detection Logic:
+        - Analyzes vocal characteristics in sliding windows (3s window, 1.5s step)
+        - Extracts speaker features: energy, pitch (F0), zero-crossing rate, spectral centroid
+        - Compares feature vectors between consecutive windows
+        - Triggers event when feature change magnitude exceeds 0.5 threshold
+        - Uses Euclidean distance in normalized feature space for comparison
+        
+        Detected Events:
+        - "speaker_change": Different speaker detected based on vocal characteristics
+        - Confidence: 0.5-0.9 based on magnitude of feature change
+        - Includes detailed feature comparison data for analysis
+        
+        Use Cases: Speaker diarization, voice activity detection, multi-speaker content analysis
         """
         if not PYAUDIOANALYSIS_AVAILABLE:
             raise PyAudioTimelineError("pyAudioAnalysis not available - cannot detect enhanced speaker changes")
@@ -527,7 +563,7 @@ class PyAudioTimelineService:
                 )
                 
                 if feature_change > 0.5:  # Significant speaker change
-                    event = create_audio_event(
+                    event = create_pyaudio_event(
                         timestamp=timestamps[i],
                         event_type="speaker_change",
                         confidence=min(0.9, 0.5 + feature_change),
@@ -547,9 +583,28 @@ class PyAudioTimelineService:
             logger.error(f"Enhanced speaker change detection failed: {e}")
             raise PyAudioTimelineError(f"Enhanced speaker change detection failed: {str(e)}") from e
     
-    def _detect_enhanced_emotion_events(self, audio_data: np.ndarray, sample_rate: int, timeline: EnhancedTimeline, source_tag: str):
+    def _detect_pyaudio_speaker_emotion_events(self, audio_data: np.ndarray, sample_rate: int, timeline: EnhancedTimeline, source_tag: str):
         """
-        Detect emotion changes using real pyAudioAnalysis emotion models for enhanced timeline
+        SPEAKER EMOTION DETECTION - Vocal Emotional State Analysis
+        
+        Detects changes in speaker emotional state using prosodic feature analysis.
+        
+        Event Detection Logic:
+        - Analyzes prosodic features in sliding windows (3s window, 1.5s step)
+        - Extracts emotion indicators: RMS energy, zero-crossing rate, fundamental frequency (F0)
+        - Classifies emotions using configurable energy/pitch thresholds
+        - Triggers event when emotion changes AND confidence exceeds threshold (0.3)
+        - Uses F0 estimation via autocorrelation for pitch analysis
+        
+        Detected Emotions:
+        - "excited": High energy + high pitch (>200Hz) - 0.8 confidence
+        - "animated": High energy + high ZCR - 0.75 confidence  
+        - "calm": Very low energy - 0.7 confidence
+        - "stressed": High pitch (>250Hz) - 0.65 confidence
+        - "tense": Very high ZCR - 0.6 confidence
+        - "neutral": Default state - 0.8 confidence
+        
+        Use Cases: Emotional content analysis, speaker state detection, prosodic analysis
         """
         if not PYAUDIOANALYSIS_AVAILABLE:
             raise PyAudioTimelineError("pyAudioAnalysis not available - cannot detect enhanced emotions")
@@ -579,7 +634,7 @@ class PyAudioTimelineService:
             prev_emotion = None
             for i, (emotion, timestamp, confidence) in enumerate(zip(emotions, timestamps, confidences)):
                 if emotion != prev_emotion and confidence > self.emotion_change_threshold:
-                    event = create_audio_event(
+                    event = create_pyaudio_event(
                         timestamp=timestamp,
                         event_type="emotion_change",
                         confidence=confidence,
@@ -600,9 +655,29 @@ class PyAudioTimelineService:
             logger.error(f"Enhanced emotion detection failed: {e}")
             raise PyAudioTimelineError(f"Enhanced emotion detection failed: {str(e)}") from e
     
-    def _detect_enhanced_environment_spans(self, audio_data: np.ndarray, sample_rate: int, timeline: EnhancedTimeline, source_tag: str):
+    def _detect_pyaudio_environment_spans(self, audio_data: np.ndarray, sample_rate: int, timeline: EnhancedTimeline, source_tag: str):
         """
-        Detect environmental/genre spans using real pyAudioAnalysis genre classification for enhanced timeline
+        ENVIRONMENT/GENRE CLASSIFICATION - Audio Context Detection
+        
+        Detects different audio environments and musical genres using spectral feature analysis.
+        
+        Span Detection Logic:
+        - Analyzes audio in 10-second segments for genre stability
+        - Extracts spectral features: energy, spectral centroid, spectral rolloff
+        - Classifies each segment using configurable thresholds
+        - Creates spans when genre remains consistent across multiple segments
+        - Breaks spans when genre changes or confidence drops below 0.6
+        - Includes detailed acoustic characteristics for each span
+        
+        Detected Genres/Environments:
+        - "speech": High spectral centroid + moderate energy (0.85 confidence)
+        - "rock": Low spectral rolloff + high energy (0.75 confidence)
+        - "classical": Low spectral centroid + moderate energy (0.7 confidence)
+        - "pop": Mid-range spectral features (0.65 confidence)
+        - "electronic": High energy threshold (0.6 confidence)
+        - "ambient": Low energy, general characteristics (0.55 confidence)
+        
+        Use Cases: Content classification, genre detection, acoustic environment analysis
         """
         if not PYAUDIOANALYSIS_AVAILABLE:
             raise PyAudioTimelineError("pyAudioAnalysis not available - cannot detect enhanced environment spans")
@@ -648,7 +723,7 @@ class PyAudioTimelineService:
                         # Average characteristics for this span
                         avg_chars = self._average_characteristics(current_chars)
                         
-                        span = create_audio_span(
+                        span = create_pyaudio_span(
                             start=current_start,
                             end=end_time,
                             span_type="environment",
@@ -672,7 +747,7 @@ class PyAudioTimelineService:
                 # Add final span
                 if len(start_times) > 0:
                     avg_chars = self._average_characteristics(current_chars)
-                    final_span = create_audio_span(
+                    final_span = create_pyaudio_span(
                         start=current_start,
                         end=len(audio_data) / sample_rate,
                         span_type="environment",
@@ -693,7 +768,7 @@ class PyAudioTimelineService:
             logger.error(f"Enhanced environment span detection failed: {e}")
             raise PyAudioTimelineError(f"Enhanced environment span detection failed: {str(e)}") from e
     
-    def _classify_enhanced_audio_event(self, audio_data: np.ndarray, sample_rate: int) -> Tuple[str, float]:
+    def _classify_pyaudio_audio_event(self, audio_data: np.ndarray, sample_rate: int) -> Tuple[str, float]:
         """
         Classify specific audio events using real pyAudioAnalysis models with confidence
         """

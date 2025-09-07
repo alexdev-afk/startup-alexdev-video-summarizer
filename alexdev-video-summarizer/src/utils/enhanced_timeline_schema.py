@@ -305,8 +305,9 @@ def create_speaker_change_event(timestamp: float, prev_speaker: str, new_speaker
     )
 
 
-def create_music_event(timestamp: float, event_type: str, confidence: float, details: Optional[Dict[str, Any]] = None) -> TimelineEvent:
-    """Create music-related timeline event for LibROSA service"""
+def create_librosa_event(timestamp: float, event_type: str, confidence: float, source: str, details: Optional[Dict[str, Any]] = None) -> TimelineEvent:
+    """Create LibROSA music analysis timeline event"""
+    assert source and isinstance(source, str) and len(source.strip()) > 0, f"Source tag must be a non-empty string, got: {source}"
     # Map event types to descriptions
     descriptions = {
         "tempo_change": "Tempo Change",
@@ -319,14 +320,15 @@ def create_music_event(timestamp: float, event_type: str, confidence: float, det
     return TimelineEvent(
         timestamp=timestamp,
         description=descriptions.get(event_type, event_type.replace('_', ' ').title()),
-        source="librosa",
+        source=source,
         confidence=confidence,
         details=details or {}
     )
 
 
-def create_music_span(start: float, end: float, span_type: str, confidence: float, details: Optional[Dict[str, Any]] = None) -> TimelineSpan:
-    """Create music-related timeline span for LibROSA service"""
+def create_librosa_span(start: float, end: float, span_type: str, confidence: float, source: str, details: Optional[Dict[str, Any]] = None) -> TimelineSpan:
+    """Create LibROSA music analysis timeline span"""
+    assert source and isinstance(source, str) and len(source.strip()) > 0, f"Source tag must be a non-empty string, got: {source}"
     # Map span types to descriptions
     descriptions = {
         "structural_segment": "Structural Segment",
@@ -339,14 +341,15 @@ def create_music_span(start: float, end: float, span_type: str, confidence: floa
         start=start,
         end=end,
         description=descriptions.get(span_type, span_type.replace('_', ' ').title()),
-        source="librosa",
+        source=source,
         confidence=confidence,
         details=details or {}
     )
 
 
-def create_audio_event(timestamp: float, event_type: str, confidence: float, details: Optional[Dict[str, Any]] = None) -> TimelineEvent:
-    """Create audio-related timeline event for pyAudio service"""
+def create_pyaudio_event(timestamp: float, event_type: str, confidence: float, source: str, details: Optional[Dict[str, Any]] = None) -> TimelineEvent:
+    """Create pyAudioAnalysis timeline event"""
+    assert source and isinstance(source, str) and len(source.strip()) > 0, f"Source tag must be a non-empty string, got: {source}"
     # Map event types to descriptions
     descriptions = {
         "speaker_change": "Speaker Change",
@@ -363,14 +366,15 @@ def create_audio_event(timestamp: float, event_type: str, confidence: float, det
     return TimelineEvent(
         timestamp=timestamp,
         description=descriptions.get(event_type, event_type.replace('_', ' ').title()),
-        source="pyaudio",
+        source=source,
         confidence=confidence,
         details=details or {}
     )
 
 
-def create_audio_span(start: float, end: float, span_type: str, confidence: float, details: Optional[Dict[str, Any]] = None) -> TimelineSpan:
-    """Create audio-related timeline span for pyAudio service"""
+def create_pyaudio_span(start: float, end: float, span_type: str, confidence: float, source: str, details: Optional[Dict[str, Any]] = None) -> TimelineSpan:
+    """Create pyAudioAnalysis timeline span"""
+    assert source and isinstance(source, str) and len(source.strip()) > 0, f"Source tag must be a non-empty string, got: {source}"
     # Map span types to descriptions
     descriptions = {
         "environment": "Environment Span"
@@ -380,7 +384,7 @@ def create_audio_span(start: float, end: float, span_type: str, confidence: floa
         start=start,
         end=end,
         description=descriptions.get(span_type, span_type.replace('_', ' ').title()),
-        source="pyaudio",
+        source=source,
         confidence=confidence,
         details=details or {}
     )
