@@ -287,7 +287,8 @@ class FFmpegService:
         Returns:
             Dictionary containing frame extraction metadata and paths
         """
-        logger.info(f"Extracting 3 frames per scene for {len(scene_boundaries)} scenes")
+        total_frames = len(scene_boundaries) * 3
+        logger.info(f"Extracting 3 frames per scene for {len(scene_boundaries)} scenes ({total_frames} total frames)")
         
         # Create frames directory
         frames_dir = video_path.parent / "frames"
@@ -297,9 +298,12 @@ class FFmpegService:
             "video_file": str(video_path.name),
             "total_scenes": len(scene_boundaries),
             "created_at": time.time(),
-            "extraction_method": "3_frames_per_scene",
+            "extraction_method": "3_frames_per_scene_optimized",
             "scenes": {}
         }
+        
+        # Build all frame extractions for a single FFmpeg command
+        all_extractions = []
         
         for boundary in scene_boundaries:
             scene_id = boundary['scene_id']
@@ -319,6 +323,13 @@ class FFmpegService:
             representative_frame = frames_dir / f"scene_{scene_id:03d}_representative.jpg"
             last_frame = frames_dir / f"scene_{scene_id:03d}_last.jpg"
             
+            # Add to extraction list
+            all_extractions.extend([
+                (start_seconds, first_frame, "scene_start"),
+                (representative_timestamp, representative_frame, "scene_middle"),
+                (end_seconds - 0.1, last_frame, "scene_end")
+            ])
+            
             scene_frames = {
                 "scene_id": scene_id,
                 "start_seconds": start_seconds,
@@ -336,25 +347,24 @@ class FFmpegService:
                         "type": "scene_middle"
                     },
                     "last": {
-                        "timestamp": end_seconds - 0.1,  # Slightly before end to avoid edge cases
+                        "timestamp": end_seconds - 0.1,
                         "path": str(last_frame),
                         "type": "scene_end"
                     }
                 }
             }
             
-            try:
-                # Extract 3 frames for this scene
-                self._extract_single_frame(video_path, first_frame, start_seconds)
-                self._extract_single_frame(video_path, representative_frame, representative_timestamp)
-                self._extract_single_frame(video_path, last_frame, end_seconds - 0.1)
-                
-                frame_data["scenes"][f"scene_{scene_id:03d}"] = scene_frames
-                logger.debug(f"Scene {scene_id}: extracted 3 frames")
-                
-            except Exception as e:
-                logger.error(f"Failed to extract frames for scene {scene_id}: {str(e)}")
-                continue
+            frame_data["scenes"][f"scene_{scene_id:03d}"] = scene_frames
+        
+        # Extract all frames in a single optimized batch
+        try:
+            self._extract_frames_batch(video_path, all_extractions)
+            logger.info(f"Frame extraction complete: {total_frames} frames extracted")
+        except Exception as e:
+            logger.error(f"Batch frame extraction failed: {str(e)}")
+            # Fallback to individual frame extraction
+            logger.info("Falling back to individual frame extraction...")
+            self._extract_frames_individually(video_path, all_extractions)
         
         # Save frame metadata JSON file
         metadata_file = frames_dir / "frame_metadata.json"
@@ -394,6 +404,100 @@ class FFmpegService:
             raise FFmpegError(f"Frame extraction timed out for timestamp {timestamp}")
         except Exception as e:
             raise FFmpegError(f"Frame extraction failed: {str(e)}")
+    
+    def _extract_frames_batch(self, video_path: Path, extractions: List[tuple]):
+        """
+        Extract multiple frames efficiently using optimized single-pass approach
+        
+        Args:
+            video_path: Path to video file
+            extractions: List of (timestamp, output_path, frame_type) tuples
+        """
+        if not extractions:
+            return
+            
+        # Sort extractions by timestamp for sequential processing
+        sorted_extractions = sorted(extractions, key=lambda x: x[0])
+        
+        # Process in batches of 10 frames to balance efficiency vs memory
+        batch_size = 10
+        for i in range(0, len(sorted_extractions), batch_size):
+            batch = sorted_extractions[i:i+batch_size]
+            self._extract_frame_batch_chunk(video_path, batch)
+    
+    def _extract_frame_batch_chunk(self, video_path: Path, batch: List[tuple]):
+        """Extract a small batch of frames efficiently"""
+        if not batch:
+            return
+            
+        # Use FFmpeg with select filter for efficient frame extraction
+        timestamps = [str(ts) for ts, _, _ in batch]
+        output_patterns = []
+        
+        # Build select filter for timestamps
+        select_expr = "+".join([f"eq(t,{ts})" for ts, _, _ in batch])
+        
+        # Create temporary output pattern  
+        temp_dir = batch[0][1].parent
+        temp_pattern = temp_dir / "temp_frame_%03d.jpg"
+        
+        cmd = [
+            self.ffmpeg_path, '-y',
+            '-i', str(video_path),
+            '-vf', f'select="{select_expr}"',
+            '-vsync', 'vfr',
+            '-q:v', '2',
+            str(temp_pattern)
+        ]
+        
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=60
+            )
+            
+            if result.returncode != 0:
+                # Fallback to individual extraction for this batch
+                for timestamp, output_path, frame_type in batch:
+                    self._extract_single_frame(video_path, output_path, timestamp)
+                return
+                
+            # Rename temporary files to final names
+            for i, (timestamp, output_path, frame_type) in enumerate(batch):
+                temp_file = temp_dir / f"temp_frame_{i+1:03d}.jpg"
+                if temp_file.exists():
+                    temp_file.rename(output_path)
+                else:
+                    # Fallback for missing frame
+                    self._extract_single_frame(video_path, output_path, timestamp)
+                    
+        except Exception as e:
+            logger.warning(f"Batch extraction failed, falling back to individual: {str(e)}")
+            # Fallback to individual extraction
+            for timestamp, output_path, frame_type in batch:
+                try:
+                    self._extract_single_frame(video_path, output_path, timestamp)
+                except Exception as single_error:
+                    logger.error(f"Failed to extract frame at {timestamp}s: {single_error}")
+    
+    def _extract_frames_individually(self, video_path: Path, extractions: List[tuple]):
+        """
+        Fallback method to extract frames individually
+        
+        Args:
+            video_path: Path to video file  
+            extractions: List of (timestamp, output_path, frame_type) tuples
+        """
+        logger.info(f"Extracting {len(extractions)} frames individually...")
+        
+        for timestamp, output_path, frame_type in extractions:
+            try:
+                self._extract_single_frame(video_path, output_path, timestamp)
+            except Exception as e:
+                logger.error(f"Failed to extract {frame_type} frame at {timestamp}s: {str(e)}")
+                continue
     
     def _extract_scene(self, video_path: Path, scene_file: Path, start_seconds: float, end_seconds: Optional[float]):
         """Extract a single scene from video"""
