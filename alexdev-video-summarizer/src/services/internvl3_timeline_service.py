@@ -538,7 +538,17 @@ class InternVL3TimelineService:
         """
         try:
             # Extract video name from video_path for dynamic build directory
-            video_name = Path(video_path).stem if '/' in video_path or '\\' in video_path else Path(video_path).name.replace('.mp4', '')
+            # For path like "build/bonita/video.mp4", we want "bonita"
+            video_path_obj = Path(video_path)
+            if 'build' in video_path_obj.parts:
+                # Find the part after 'build' - that's the video name
+                build_index = video_path_obj.parts.index('build')
+                if build_index + 1 < len(video_path_obj.parts):
+                    video_name = video_path_obj.parts[build_index + 1]
+                else:
+                    video_name = video_path_obj.stem
+            else:
+                video_name = video_path_obj.stem
             
             # Load frame metadata from PySceneDetect  
             frame_metadata_path = Path("build") / video_name / "frames" / "frame_metadata.json"
