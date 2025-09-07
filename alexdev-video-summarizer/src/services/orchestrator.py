@@ -72,16 +72,17 @@ class VideoProcessingOrchestrator:
         root_logger = logging.getLogger()
         old_root_level = root_logger.level
         
-        # Get all existing loggers and their levels
+        # Get snapshot of all existing loggers and their levels
         old_levels = {}
-        for name in logging.Logger.manager.loggerDict:
+        logger_names = list(logging.Logger.manager.loggerDict.keys())  # Create snapshot
+        for name in logger_names:
             logger_obj = logging.getLogger(name)
             old_levels[name] = logger_obj.level
         
         try:
             # Silence ALL loggers
             root_logger.setLevel(logging.CRITICAL)
-            for name in logging.Logger.manager.loggerDict:
+            for name in logger_names:
                 logging.getLogger(name).setLevel(logging.CRITICAL)
                 
             # Completely suppress stdout/stderr from services
