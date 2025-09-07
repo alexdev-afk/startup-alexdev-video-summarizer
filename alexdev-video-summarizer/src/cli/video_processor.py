@@ -231,20 +231,20 @@ class VideoProcessorCLI:
         
         # Show successful outputs
         if successful_count > 0:
-            # List actual knowledge files generated
-            knowledge_files = []
+            # List organized output directories generated
+            output_dirs = []
             for name, result in results['successful']:
                 video_name = Path(name).stem
-                # Current pipeline generates multiple knowledge files
-                knowledge_files.extend([
-                    f"- output/{video_name}_knowledge_noncontextualvlm.md",
-                    f"- output/{video_name}_knowledge_vid2seq.md"
-                ])
+                # New organized output structure
+                output_dirs.append(f"- output/{video_name}/")
+                output_dirs.append(f"  ├── {video_name}_knowledge.md")
+                output_dirs.append(f"  ├── {name} (original video)")
+                output_dirs.append(f"  └── frames/ (representative frames used for analysis)")
             
             output_panel = Panel(
-                f"[FILES] [bold]Knowledge Base Files Created:[/bold]\n"
-                + "\n".join(knowledge_files),
-                title="Output Files",
+                f"[FILES] [bold]Organized Output Directories Created:[/bold]\n"
+                + "\n".join(output_dirs),
+                title="Output Structure",
                 border_style="green"
             )
             self.console.print(output_panel)

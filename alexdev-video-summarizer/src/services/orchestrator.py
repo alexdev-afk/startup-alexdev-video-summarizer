@@ -259,18 +259,55 @@ class VideoProcessingOrchestrator:
             knowledge_file = None
             
             if video_timeline_sources:
+                # Create organized output directory structure: output/{videoname}/
+                video_output_dir = Path("output") / context.video_name
+                video_output_dir.mkdir(parents=True, exist_ok=True)
+                
+                # Knowledge file: output/{videoname}/{videoname}_knowledge.md
+                knowledge_file_path = video_output_dir / f"{context.video_name}_knowledge.md"
+                
                 # Use the first/primary video timeline with original method
                 primary_video_timeline = next(iter(video_timeline_sources.values()))
-                output_path = Path("output") / f"{context.video_name}_knowledge.md"
-                output_path.parent.mkdir(exist_ok=True)
                 
                 with self._suppress_service_logging():
                     self.knowledge_generator.generate_timeline_from_files(
-                        audio_timeline_path, primary_video_timeline, context.video_name, output_path
+                        audio_timeline_path, primary_video_timeline, context.video_name, knowledge_file_path
                     )
-                knowledge_file = output_path
                 
-                logger.info(f"Generated knowledge file: {output_path}")
+                # Copy original video to output directory
+                original_video = video_path
+                output_video = video_output_dir / original_video.name
+                if original_video.exists() and not output_video.exists():
+                    import shutil
+                    shutil.copy2(original_video, output_video)
+                    logger.info(f"Copied original video to: {output_video}")
+                
+                # Copy representative frames used for VLM analysis
+                frames_source_dir = context.build_directory / "frames" 
+                frames_output_dir = video_output_dir / "frames"
+                
+                if frames_source_dir.exists():
+                    frames_output_dir.mkdir(exist_ok=True)
+                    import shutil
+                    
+                    # Copy all frame files
+                    for frame_file in frames_source_dir.glob("*.jpg"):
+                        output_frame = frames_output_dir / frame_file.name
+                        if not output_frame.exists():
+                            shutil.copy2(frame_file, output_frame)
+                    
+                    # Copy frame metadata if it exists
+                    metadata_file = frames_source_dir / "frame_metadata.json"
+                    if metadata_file.exists():
+                        output_metadata = frames_output_dir / "frame_metadata.json"
+                        if not output_metadata.exists():
+                            shutil.copy2(metadata_file, output_metadata)
+                    
+                    frame_count = len(list(frames_output_dir.glob("*.jpg")))
+                    logger.info(f"Copied {frame_count} representative frames to: {frames_output_dir}")
+                
+                knowledge_file = knowledge_file_path
+                logger.info(f"Generated organized output: {video_output_dir}")
             else:
                 logger.warning("No video timeline sources found for knowledge generation")
             
