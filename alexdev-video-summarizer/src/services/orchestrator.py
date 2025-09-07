@@ -22,7 +22,6 @@ from services.scene_detection_service import SceneDetectionService
 from services.demucs_service import DemucsService
 from services.demucs_audio_coordinator import DemucsAudioCoordinatorService
 from services.internvl3_timeline_service import InternVL3TimelineService
-from services.vid2seq_timeline_service import Vid2SeqTimelineService
 from services.knowledge_generator import KnowledgeGenerator
 from utils.processing_context import VideoProcessingContext
 from utils.circuit_breaker import CircuitBreaker
@@ -56,7 +55,6 @@ class VideoProcessingOrchestrator:
         
         # Video processing services
         self.video_service = InternVL3TimelineService(config)
-        self.vid2seq_service = Vid2SeqTimelineService(config)
         
         self.knowledge_generator = KnowledgeGenerator(config)
         
@@ -213,25 +211,10 @@ class VideoProcessingOrchestrator:
             if hasattr(self.video_service, 'cleanup'):
                 self.video_service.cleanup()
                 
-            # Step 5B: Vid2Seq Dense Video Captioning
-            progress_callback('video_processing', {
-                'stage': 'vid2seq_starting',
-                'processing_mode': 'vid2seq_dense_captioning'
-            })
-            
-            # Process video with Vid2Seq for dense captioning
-            with self._suppress_service_logging():
-                vid2seq_timeline = self.vid2seq_service.generate_and_save(str(context.processed_video_path), None)
-            
             progress_callback('video_processing', {
                 'stage': 'completed',
-                'vid2seq_events_generated': len(vid2seq_timeline.events) if vid2seq_timeline else 0,
-                'internvl3_events_generated': len(video_timeline.events) if video_timeline else 0
+                'events_generated': len(video_timeline.events) if video_timeline else 0
             })
-            
-            # Cleanup Vid2Seq service to free VRAM
-            if hasattr(self.vid2seq_service, 'cleanup'):
-                self.vid2seq_service.cleanup()
             
             # Store video analysis results in context
             if video_timeline:
@@ -271,11 +254,6 @@ class VideoProcessingOrchestrator:
                 latest_legacy = max(legacy_files, key=lambda f: f.stat().st_mtime)
                 video_timeline_sources['internvl3'] = latest_legacy
             
-            # Look for Vid2Seq timeline files
-            vid2seq_files = list(video_timeline_path.glob("vid2seq_timeline.json"))
-            if vid2seq_files:
-                latest_vid2seq = max(vid2seq_files, key=lambda f: f.stat().st_mtime)
-                video_timeline_sources['vid2seq'] = latest_vid2seq
             
             # Generate single comprehensive knowledge file
             knowledge_file = None
