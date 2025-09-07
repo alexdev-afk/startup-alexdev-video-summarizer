@@ -163,11 +163,11 @@ class VideoProcessorCLI:
                 # Show current video header
                 progress_display.show_video_header(i, len(videos), video.name)
                 
-                # Process video with real-time updates (suppress stdout/stderr)
-                with self._suppress_output():
-                    result = self.orchestrator.process_video_with_progress(
-                        video, progress_display.update_pipeline_progress
-                    )
+                # Process video with real-time updates
+                # Note: We don't suppress output here so progress callbacks work
+                result = self.orchestrator.process_video_with_progress(
+                    video, progress_display.update_pipeline_progress
+                )
                 
                 if result.success:
                     results['successful'].append((video.name, result))

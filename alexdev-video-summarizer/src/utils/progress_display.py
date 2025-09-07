@@ -33,10 +33,14 @@ class ProgressDisplay:
         self.current_stage = ""
         self.pipeline_status = {}
         self.start_time = time.time()
+        self.live_display = None
+        self.video_header_shown = False
         
     def show_video_header(self, video_num: int, total_videos: int, video_name: str):
         """Show header for current video being processed"""
         self.current_video = video_name
+        self.current_video_num = video_num
+        self.total_videos = total_videos
         self.pipeline_status = {}
         
         header = Panel(
@@ -61,8 +65,20 @@ class ProgressDisplay:
         # Create pipeline status table
         pipeline_table = self._create_pipeline_table()
         
-        # Clear previous output and show updated table
-        self.console.print("\r", end="")
+        # Clear console and show updated table
+        self.console.clear()
+        
+        # Show video header again
+        if hasattr(self, 'current_video_num'):
+            header = Panel(
+                f"[VIDEO] [bold cyan]Processing Video {self.current_video_num}/{self.total_videos}[/bold cyan]\n"
+                f"[FILE] {self.current_video}",
+                title="Current Video",
+                border_style="cyan"
+            )
+            self.console.print(header)
+        
+        # Show pipeline progress
         self.console.print(pipeline_table)
         
     def _create_pipeline_table(self) -> Table:

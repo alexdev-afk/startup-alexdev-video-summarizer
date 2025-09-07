@@ -9,9 +9,13 @@ Implements fail-fast per video and circuit breaker for batch processing.
 
 import time
 import gc
+import logging
+import contextlib
 from pathlib import Path
 from typing import Dict, Any, Callable, Optional
 from dataclasses import dataclass
+from io import StringIO
+import sys
 
 from services.ffmpeg_service import FFmpegService
 from services.scene_detection_service import SceneDetectionService
@@ -61,6 +65,43 @@ class VideoProcessingOrchestrator:
             failure_threshold=config.get('circuit_breaker_threshold', 3)
         )
         
+    @contextlib.contextmanager
+    def _suppress_service_logging(self):
+        """Suppress ALL logging and output from services during processing to keep CLI clean"""
+        # Suppress ALL loggers by setting root logger to CRITICAL
+        root_logger = logging.getLogger()
+        old_root_level = root_logger.level
+        
+        # Get all existing loggers and their levels
+        old_levels = {}
+        for name in logging.Logger.manager.loggerDict:
+            logger_obj = logging.getLogger(name)
+            old_levels[name] = logger_obj.level
+        
+        try:
+            # Silence ALL loggers
+            root_logger.setLevel(logging.CRITICAL)
+            for name in logging.Logger.manager.loggerDict:
+                logging.getLogger(name).setLevel(logging.CRITICAL)
+                
+            # Completely suppress stdout/stderr from services
+            old_stdout = sys.stdout
+            old_stderr = sys.stderr
+            sys.stdout = StringIO()
+            sys.stderr = StringIO()
+            
+            yield
+            
+        finally:
+            # Restore stdout/stderr
+            sys.stdout = old_stdout
+            sys.stderr = old_stderr
+            
+            # Restore ALL logger levels
+            root_logger.setLevel(old_root_level)
+            for name, level in old_levels.items():
+                logging.getLogger(name).setLevel(level)
+        
     def process_video_with_progress(self, video_path: Path, progress_callback: Callable) -> ProcessingResult:
         """
         Process single video with progress updates
@@ -81,7 +122,8 @@ class VideoProcessingOrchestrator:
             
             # Step 1: FFmpeg Foundation (CRITICAL)
             progress_callback('ffmpeg', {'stage': 'starting', 'tool': 'FFmpeg'})
-            context.audio_path, context.processed_video_path = self.ffmpeg_service.extract_streams(video_path)
+            with self._suppress_service_logging():
+                context.audio_path, context.processed_video_path = self.ffmpeg_service.extract_streams(video_path)
             
             if not context.validate_ffmpeg_output():
                 raise Exception("FFmpeg audio/video extraction failed")
@@ -89,7 +131,8 @@ class VideoProcessingOrchestrator:
             
             # Step 2: Scene Detection (CRITICAL)
             progress_callback('scene_detection', {'stage': 'starting', 'tool': 'PySceneDetect'})
-            context.scene_data = self.scene_service.analyze_video_scenes(context.processed_video_path)
+            with self._suppress_service_logging():
+                context.scene_data = self.scene_service.analyze_video_scenes(context.processed_video_path)
             
             if context.scene_data['scene_count'] == 0:
                 raise Exception("No scenes detected in video")
@@ -101,7 +144,8 @@ class VideoProcessingOrchestrator:
             
             # Step 2.5: Demucs Audio Separation (BREAKTHROUGH)
             progress_callback('demucs_separation', {'stage': 'starting', 'tool': 'Demucs'})
-            context.vocals_path, context.no_vocals_path = self.demucs_service.separate_audio(context)
+            with self._suppress_service_logging():
+                context.vocals_path, context.no_vocals_path = self.demucs_service.separate_audio(context)
             
             if not context.vocals_path.exists() or not context.no_vocals_path.exists():
                 raise Exception("Demucs audio separation failed")
@@ -114,7 +158,8 @@ class VideoProcessingOrchestrator:
             
             # Step 3: Demucs Audio Processing (BREAKTHROUGH)
             progress_callback('audio_processing', {'stage': 'starting', 'approach': 'demucs_separated'})
-            audio_timelines = self.audio_coordinator.process_all_audio_timelines(context)
+            with self._suppress_service_logging():
+                audio_timelines = self.audio_coordinator.process_all_audio_timelines(context)
             
             # Save individual timeline files
             self.audio_coordinator.save_individual_timelines(audio_timelines, context)
@@ -134,11 +179,12 @@ class VideoProcessingOrchestrator:
             # Step 4: Frame Extraction (FIXED)
             progress_callback('frame_extraction', {'stage': 'starting'})
             # Extract representative frames for each scene (3 frames per scene)
-            frame_extraction_result = self.scene_service.coordinate_frame_extraction(
-                context.processed_video_path, 
-                context.scene_data['boundaries'], 
-                self.ffmpeg_service
-            )
+            with self._suppress_service_logging():
+                frame_extraction_result = self.scene_service.coordinate_frame_extraction(
+                    context.processed_video_path, 
+                    context.scene_data['boundaries'], 
+                    self.ffmpeg_service
+                )
             context.scene_data.update(frame_extraction_result)
             frame_count = frame_extraction_result.get('total_frames_extracted', 0)
             progress_callback('frame_extraction', {
@@ -153,7 +199,8 @@ class VideoProcessingOrchestrator:
             })
             
             # Process all extracted frames with InternVL3
-            video_timeline = self.video_service.generate_and_save(str(context.processed_video_path), None)
+            with self._suppress_service_logging():
+                video_timeline = self.video_service.generate_and_save(str(context.processed_video_path), None)
             
             progress_callback('video_processing', {
                 'stage': 'internvl3_completed',
@@ -172,7 +219,8 @@ class VideoProcessingOrchestrator:
             })
             
             # Process video with Vid2Seq for dense captioning
-            vid2seq_timeline = self.vid2seq_service.generate_and_save(str(context.processed_video_path), None)
+            with self._suppress_service_logging():
+                vid2seq_timeline = self.vid2seq_service.generate_and_save(str(context.processed_video_path), None)
             
             progress_callback('video_processing', {
                 'stage': 'completed',
@@ -215,9 +263,10 @@ class VideoProcessingOrchestrator:
                 output_path = Path("output") / f"{context.video_name}_knowledge_contextualvlm.md"
                 output_path.parent.mkdir(exist_ok=True)
                 
-                self.knowledge_generator.generate_timeline_from_files(
-                    audio_timeline_path, latest_contextual, context.video_name, output_path
-                )
+                with self._suppress_service_logging():
+                    self.knowledge_generator.generate_timeline_from_files(
+                        audio_timeline_path, latest_contextual, context.video_name, output_path
+                    )
                 knowledge_file = output_path
                 logger.info(f"Generated contextual knowledge: {output_path}")
             
@@ -227,9 +276,10 @@ class VideoProcessingOrchestrator:
                 output_path = Path("output") / f"{context.video_name}_knowledge_noncontextualvlm.md"
                 output_path.parent.mkdir(exist_ok=True)
                 
-                self.knowledge_generator.generate_timeline_from_files(
-                    audio_timeline_path, latest_noncontextual, context.video_name, output_path
-                )
+                with self._suppress_service_logging():
+                    self.knowledge_generator.generate_timeline_from_files(
+                        audio_timeline_path, latest_noncontextual, context.video_name, output_path
+                    )
                 knowledge_file = output_path  # Keep most recent as primary
                 logger.info(f"Generated noncontextual knowledge: {output_path}")
             
@@ -239,9 +289,10 @@ class VideoProcessingOrchestrator:
                 output_path = Path("output") / f"{context.video_name}_knowledge_vid2seq.md"
                 output_path.parent.mkdir(exist_ok=True)
                 
-                self.knowledge_generator.generate_timeline_from_files(
-                    audio_timeline_path, latest_vid2seq, context.video_name, output_path
-                )
+                with self._suppress_service_logging():
+                    self.knowledge_generator.generate_timeline_from_files(
+                        audio_timeline_path, latest_vid2seq, context.video_name, output_path
+                    )
                 knowledge_file = output_path  # Keep most recent as primary
                 logger.info(f"Generated vid2seq knowledge: {output_path}")
             
@@ -253,9 +304,10 @@ class VideoProcessingOrchestrator:
                     output_path = Path("output") / f"{context.video_name}_knowledge.md"
                     output_path.parent.mkdir(exist_ok=True)
                     
-                    self.knowledge_generator.generate_timeline_from_files(
-                        audio_timeline_path, latest_timeline, context.video_name, output_path
-                    )
+                    with self._suppress_service_logging():
+                        self.knowledge_generator.generate_timeline_from_files(
+                            audio_timeline_path, latest_timeline, context.video_name, output_path
+                        )
                     knowledge_file = output_path
                     logger.info(f"Generated legacy knowledge: {output_path}")
                 else:

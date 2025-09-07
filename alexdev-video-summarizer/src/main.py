@@ -9,7 +9,9 @@ Main entry point for CLI application.
 import click
 import sys
 import os
+import contextlib
 from pathlib import Path
+from io import StringIO
 
 # Fix Windows console encoding for Unicode support
 if sys.platform.startswith('win'):
@@ -29,6 +31,22 @@ sys.path.insert(0, str(Path(__file__).parent))
 from cli.video_processor import VideoProcessorCLI
 from utils.config_loader import ConfigLoader
 from utils.logger import setup_logging
+
+
+@contextlib.contextmanager
+def _suppress_output():
+    """Context manager to suppress stdout/stderr during initialization"""
+    old_stdout = sys.stdout
+    old_stderr = sys.stderr
+    try:
+        # Redirect stdout/stderr to string buffers
+        sys.stdout = StringIO()
+        sys.stderr = StringIO()
+        yield
+    finally:
+        # Restore original stdout/stderr
+        sys.stdout = old_stdout
+        sys.stderr = old_stderr
 
 
 @click.command()
@@ -56,21 +74,27 @@ def main(input_path, output_dir, config_file, verbose, dry_run):
     8-tool AI pipeline: FFmpeg + PySceneDetect + 7 AI analysis tools.
     """
     
-    # Setup logging
-    log_level = 'DEBUG' if verbose else 'INFO'
-    setup_logging(log_level)
+    # Setup logging - suppress unless verbose mode
+    if verbose:
+        log_level = 'DEBUG'
+        setup_logging(log_level)
+    else:
+        # Suppress all logging output for clean CLI
+        import logging
+        logging.getLogger().setLevel(logging.CRITICAL)
     
     try:
-        # Load configuration
-        config = ConfigLoader.load_config(config_file)
-        
-        # Initialize CLI processor
-        processor = VideoProcessorCLI(
-            input_path=input_path,
-            output_dir=output_dir,
-            config=config,
-            dry_run=dry_run
-        )
+        # Load configuration and initialize with suppressed output
+        with _suppress_output():
+            config = ConfigLoader.load_config(config_file)
+            
+            # Initialize CLI processor
+            processor = VideoProcessorCLI(
+                input_path=input_path,
+                output_dir=output_dir,
+                config=config,
+                dry_run=dry_run
+            )
         
         # Run processing pipeline
         processor.run()
