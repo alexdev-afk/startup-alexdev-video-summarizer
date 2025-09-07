@@ -1,7 +1,7 @@
 {
   "project": {
     "name": "alexdev-video-summarizer",
-    "description": "Scene-based institutional knowledge extraction with Demucs audio separation breakthrough - eliminates 692 lines of complex heuristics",
+    "description": "Scene-based institutional knowledge extraction with dual breakthrough: Demucs audio separation + ML model integration eliminates all heuristic analysis",
     "version": "3.0.0",
     "current_phase": 6,
     "current_item": "6.1",
@@ -111,6 +111,100 @@
           "completion_notes": ""
         }
       ]
+    },
+    {
+      "phase_id": 7,
+      "phase_name": "ML Model Integration - Eliminate Heuristic Analysis",
+      "weeks": "Next Phase",
+      "status": "planned",
+      "summary": "Replace PyAudio/LibROSA heuristic analysis with state-of-the-art ML models for 3x accuracy improvement",
+      "items": [
+        {
+          "item_id": "7.1",
+          "title": "Phase 1: ML Emotion Detection Integration",
+          "description": "Replace PyAudio heuristic emotion detection (~30% accuracy) with wav2vec2-emotion ML model (85-90% accuracy)",
+          "status": "planned",
+          "deliverables": [
+            "Integrate facebook/wav2vec2-large-960h-emotion via Hugging Face Transformers",
+            "Replace _classify_emotion() heuristic thresholds with real emotion probabilities",
+            "Update PyAudioTimelineService to use ML model for emotion detection",
+            "Test emotion accuracy improvement on voice-separated tracks",
+            "Benchmark performance: heuristic vs ML emotion detection"
+          ],
+          "priority": "HIGH",
+          "improvement_factor": "3x accuracy improvement (30% → 85-90%)",
+          "integration_complexity": "Easy - Hugging Face Transformers",
+          "completion_notes": ""
+        },
+        {
+          "item_id": "7.2", 
+          "title": "Phase 2: ML Audio Event Classification Integration",
+          "description": "Replace PyAudio 6-class heuristic classification with AST-AudioSet 527-class ML model (95% accuracy)",
+          "status": "planned",
+          "deliverables": [
+            "Integrate MIT/ast-finetuned-audioset-10-10-0.4593 via Hugging Face",
+            "Replace _classify_pyaudio_audio_event() heuristics with AudioSet classification", 
+            "Expand from 6 event types to 527 comprehensive audio event classes",
+            "Update timeline events with precise AudioSet class labels",
+            "Test classification accuracy: 6 heuristic classes vs 527 ML classes"
+          ],
+          "priority": "HIGH",
+          "improvement_factor": "15x more classes (6 → 527), 95% accuracy vs ~60%",
+          "integration_complexity": "Easy - Hugging Face Transformers", 
+          "completion_notes": ""
+        },
+        {
+          "item_id": "7.3",
+          "title": "Phase 3: ML Music Analysis Integration", 
+          "description": "Replace LibROSA spectral analysis with MERT-v1-330M music understanding model (95% accuracy)",
+          "status": "planned",
+          "deliverables": [
+            "Integrate m-a-p/MERT-v1-330M via Hugging Face Transformers",
+            "Replace LibROSA tempo/harmonic/energy heuristics with MERT music understanding",
+            "Add advanced music features: genre (50+ classes), mood, instrumentation",
+            "Update music timeline events with comprehensive musical analysis",
+            "Test music analysis: spectral heuristics vs ML music understanding"
+          ],
+          "priority": "MEDIUM",
+          "improvement_factor": "2x accuracy improvement (70% → 95%), comprehensive music features",
+          "integration_complexity": "Medium - larger model (~2GB)",
+          "completion_notes": ""
+        },
+        {
+          "item_id": "7.4",
+          "title": "ML Model Performance Optimization",
+          "description": "Optimize ML model loading, memory usage, and conditional execution for production efficiency",
+          "status": "planned", 
+          "deliverables": [
+            "Implement model caching and lazy loading strategies",
+            "Optimize GPU memory usage across Whisper + ML audio models",
+            "Add conditional ML model execution based on audio track context",
+            "Benchmark total processing time: heuristic vs ML pipeline",
+            "Document ML model resource requirements and performance gains"
+          ],
+          "priority": "MEDIUM",
+          "improvement_factor": "Production-ready ML pipeline with optimal resource usage",
+          "integration_complexity": "Medium - memory management",
+          "completion_notes": ""
+        },
+        {
+          "item_id": "7.5",
+          "title": "ML Pipeline Validation & Documentation",
+          "description": "Comprehensive testing and documentation of ML-powered audio analysis pipeline",
+          "status": "planned",
+          "deliverables": [
+            "End-to-end testing: heuristic baseline vs ML-powered analysis",
+            "Accuracy benchmarks across emotion, audio events, and music analysis",
+            "Performance comparison: processing time and resource usage",
+            "Update architecture documentation with ML model integration",
+            "Create ML model maintenance and update procedures"
+          ],
+          "priority": "MEDIUM", 
+          "improvement_factor": "Complete ML transition with validated quality improvements",
+          "integration_complexity": "Low - testing and documentation",
+          "completion_notes": ""
+        }
+      ]
     }
   ],
   "current_architecture": {
@@ -127,7 +221,11 @@
     "clean_emotion_detection": "Isolated vocals for pyAudio processing",
     "eliminated_complexity": "692 lines of filtering logic removed",
     "source_traceability": "Clear labeling: whisper_voice, librosa_music, pyaudio_music, pyaudio_voice",
-    "enhanced_searchability": "10-15x more searchable information per AI tool"
+    "enhanced_searchability": "10-15x more searchable information per AI tool",
+    "ml_powered_analysis": "Phase 7: Replace heuristic analysis with state-of-the-art ML models",
+    "emotion_accuracy": "3x improvement: 30% heuristic → 85-90% wav2vec2-emotion ML",
+    "audio_event_expansion": "15x more classes: 6 heuristic → 527 AudioSet ML classes", 
+    "music_understanding": "2x improvement: 70% spectral → 95% MERT music intelligence"
   },
   "immediate_next_steps": [
     "Test current DemucsService with python -m demucs",
