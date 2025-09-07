@@ -282,29 +282,56 @@ class VideoProcessingOrchestrator:
                     shutil.copy2(original_video, output_video)
                     logger.info(f"Copied original video to: {output_video}")
                 
-                # Copy representative frames used for VLM analysis
+                # Copy representative frames with timestamp-based naming
                 frames_source_dir = context.build_directory / "frames" 
                 frames_output_dir = video_output_dir / "frames"
                 
                 if frames_source_dir.exists():
                     frames_output_dir.mkdir(exist_ok=True)
                     import shutil
+                    import json
                     
-                    # Copy all frame files
+                    # Load frame metadata to get timestamps
+                    metadata_file = frames_source_dir / "frame_metadata.json"
+                    frame_mapping = {}
+                    
+                    if metadata_file.exists():
+                        try:
+                            with open(metadata_file, 'r') as f:
+                                metadata = json.load(f)
+                                
+                            # Create mapping of original filename to timestamp-based name
+                            for scene_key, scene_data in metadata.get('scenes', {}).items():
+                                if 'frames' in scene_data:
+                                    scene_start = scene_data.get('start_seconds', 0)
+                                    
+                                    for frame_type, frame_info in scene_data['frames'].items():
+                                        timestamp = frame_info.get('timestamp', scene_start)
+                                        original_name = Path(frame_info.get('path', '')).name
+                                        
+                                        # Format: {MM}m{SS}s_{frame_type}.jpg (e.g., 01m23s_first.jpg)
+                                        m, s = divmod(timestamp, 60)
+                                        new_name = f"{int(m):02d}m{s:05.2f}s_{frame_type}.jpg"
+                                        frame_mapping[original_name] = new_name
+                                        
+                        except Exception as e:
+                            logger.warning(f"Could not parse frame metadata: {e}")
+                    
+                    # Copy frame files with timestamp-based naming
+                    copied_count = 0
                     for frame_file in frames_source_dir.glob("*.jpg"):
-                        output_frame = frames_output_dir / frame_file.name
+                        # Use timestamp-based name if available, otherwise keep original
+                        if frame_file.name in frame_mapping:
+                            output_name = frame_mapping[frame_file.name]
+                        else:
+                            output_name = frame_file.name
+                            
+                        output_frame = frames_output_dir / output_name
                         if not output_frame.exists():
                             shutil.copy2(frame_file, output_frame)
+                            copied_count += 1
                     
-                    # Copy frame metadata if it exists
-                    metadata_file = frames_source_dir / "frame_metadata.json"
-                    if metadata_file.exists():
-                        output_metadata = frames_output_dir / "frame_metadata.json"
-                        if not output_metadata.exists():
-                            shutil.copy2(metadata_file, output_metadata)
-                    
-                    frame_count = len(list(frames_output_dir.glob("*.jpg")))
-                    logger.info(f"Copied {frame_count} representative frames to: {frames_output_dir}")
+                    logger.info(f"Copied {copied_count} representative frames with timestamps to: {frames_output_dir}")
                 
                 knowledge_file = knowledge_file_path
                 logger.info(f"Generated organized output: {video_output_dir}")
