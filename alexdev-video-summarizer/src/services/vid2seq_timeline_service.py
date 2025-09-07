@@ -187,12 +187,8 @@ class Vid2SeqTimelineService:
             {"start": 25.1, "end": 30.0, "caption": "Consultation concludes with the women standing up in the salon"}
         ]
         
-        # Process with real Vid2Seq model
-        try:
-            dense_captions = self._run_vid2seq_inference(video_path, total_duration)
-        except Exception as e:
-            logger.warning(f"Vid2Seq inference failed: {e}, using fallback")
-            dense_captions = self._create_fallback_captions(total_duration)
+        # Process with real Vid2Seq model - FAIL FAST
+        dense_captions = self._run_vid2seq_inference(video_path, total_duration)
         
         # Convert to timeline events (Vid2Seq generates events, not spans)
         from utils.enhanced_timeline_schema import TimelineEvent
@@ -216,52 +212,47 @@ class Vid2SeqTimelineService:
     
     def _run_vid2seq_inference(self, video_path: str, total_duration: float) -> List[Dict[str, Any]]:
         """Run Vid2Seq inference on video"""
-        try:
-            # Ensure model is loaded
-            self._ensure_model_loaded()
+        # Ensure model is loaded
+        self._ensure_model_loaded()
+        
+        import torch
+        import numpy as np
+        
+        # Extract visual features from video
+        visual_features = self._extract_visual_features(video_path)
+        
+        # Create input tensors
+        input_features = torch.tensor(visual_features).unsqueeze(0)  # Add batch dimension
+        if torch.cuda.is_available() and hasattr(self.model, 'cuda'):
+            input_features = input_features.cuda()
+        
+        # Generate captions with Vid2Seq
+        with torch.no_grad():
+            # Use generate method from PreTrainedModel
+            outputs = self.model.generate(
+                input_features=input_features,
+                max_length=50,
+                num_beams=4,
+                do_sample=False,
+                temperature=1.0
+            )
+        
+        # Decode outputs to text
+        captions = []
+        for i, output in enumerate(outputs):
+            caption_text = self.tokenizer.decode(output, skip_special_tokens=True)
+            # Calculate timestamps based on frame position
+            start_time = (i / len(outputs)) * total_duration
+            end_time = min(((i + 1) / len(outputs)) * total_duration, total_duration)
             
-            import torch
-            import numpy as np
-            
-            # Extract visual features from video
-            visual_features = self._extract_visual_features(video_path)
-            
-            # Create input tensors
-            input_features = torch.tensor(visual_features).unsqueeze(0)  # Add batch dimension
-            if torch.cuda.is_available() and hasattr(self.model, 'cuda'):
-                input_features = input_features.cuda()
-            
-            # Generate captions with Vid2Seq
-            with torch.no_grad():
-                # Use generate method from PreTrainedModel
-                outputs = self.model.generate(
-                    input_features=input_features,
-                    max_length=50,
-                    num_beams=4,
-                    do_sample=False,
-                    temperature=1.0
-                )
-            
-            # Decode outputs to text
-            captions = []
-            for i, output in enumerate(outputs):
-                caption_text = self.tokenizer.decode(output, skip_special_tokens=True)
-                # Calculate timestamps based on frame position
-                start_time = (i / len(outputs)) * total_duration
-                end_time = min(((i + 1) / len(outputs)) * total_duration, total_duration)
-                
-                captions.append({
-                    'start': start_time,
-                    'end': end_time,
-                    'caption': caption_text,
-                    'confidence': 0.85  # Model confidence
-                })
-            
-            return captions
-            
-        except Exception as e:
-            logger.error(f"Vid2Seq inference failed: {e}")
-            return self._create_fallback_captions(total_duration)
+            captions.append({
+                'start': start_time,
+                'end': end_time,
+                'caption': caption_text,
+                'confidence': 0.85  # Model confidence
+            })
+        
+        return captions
     
     def _extract_visual_features(self, video_path: str):
         """Extract visual features from video frames"""
@@ -299,23 +290,6 @@ class Vid2SeqTimelineService:
             
         return np.array(features)
     
-    def _create_fallback_captions(self, total_duration: float) -> List[Dict[str, Any]]:
-        """Create fallback captions when Vid2Seq fails"""
-        num_segments = max(1, int(total_duration // 5))  # 5-second segments
-        captions = []
-        
-        for i in range(num_segments):
-            start_time = i * (total_duration / num_segments)
-            end_time = min((i + 1) * (total_duration / num_segments), total_duration)
-            
-            captions.append({
-                'start': start_time,
-                'end': end_time,
-                'caption': f"Video content from {start_time:.1f}s to {end_time:.1f}s",
-                'confidence': 0.1  # Low confidence for fallback
-            })
-            
-        return captions
 
     def _get_video_metadata(self, video_path: str) -> Dict[str, Any]:
         """Extract video metadata"""
