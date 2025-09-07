@@ -97,10 +97,26 @@ class LibROSATimelineService:
             timeline.processing_notes.append(f"LibROSA music analysis - sample_rate: {self.sample_rate}, analysis_window: {self.analysis_window}")
             timeline.processing_notes.append(f"Audio frames: {len(audio_data)}, analysis completed")
             
-            # Generate music events using real LibROSA analysis
+            # Generate music events using real LibROSA analysis with conditional detection
             assert source_tag, "source_tag is required for timeline generation"
-            self._detect_librosa_music_events(audio_data, timeline, source_tag)
-            self._detect_librosa_structural_spans(audio_data, timeline, source_tag)
+            
+            # Apply conditional detection based on optimization config  
+            opt = optimization or {}
+            
+            # Conditional music event detection
+            if (opt.get('analyze_tempo_changes', True) or 
+                opt.get('analyze_harmonic_shifts', True) or 
+                opt.get('analyze_energy_transitions', True) or 
+                opt.get('analyze_onset_events', True)):
+                self._detect_librosa_music_events(audio_data, timeline, source_tag, opt)
+            else:
+                logger.debug("Skipping all music event detection - disabled by optimization config")
+            
+            # Conditional structural analysis
+            if opt.get('analyze_structural_segments', True):
+                self._detect_librosa_structural_spans(audio_data, timeline, source_tag)
+            else:
+                logger.debug("Skipping structural segmentation - disabled by optimization config")
             
             processing_time = time.time() - start_time
             logger.info(f"LibROSA timeline generated: {len(timeline.events)} events, {len(timeline.spans)} spans in {processing_time:.2f}s")
@@ -469,25 +485,39 @@ class LibROSATimelineService:
             logger.error(f"Structural segmentation failed: {e}")
             raise LibROSATimelineError(f"Structural segmentation failed: {str(e)}") from e
     
-    def _detect_librosa_music_events(self, audio_data: np.ndarray, timeline: EnhancedTimeline, source_tag: str):
+    def _detect_librosa_music_events(self, audio_data: np.ndarray, timeline: EnhancedTimeline, source_tag: str, optimization: Dict = None):
         """
-        Detect musical events using real LibROSA capabilities for enhanced timeline
+        Detect musical events using real LibROSA capabilities with conditional analysis
         """
         if not LIBROSA_AVAILABLE:
             raise LibROSATimelineError("LibROSA not available - cannot detect enhanced music events")
         
         try:
-            # 1. Tempo transitions using beat tracking
-            self._detect_librosa_tempo_events(audio_data, timeline, source_tag)
+            opt = optimization or {}
             
-            # 2. Musical onsets and rhythm changes
-            self._detect_librosa_onset_events(audio_data, timeline, source_tag)
+            # 1. Conditional tempo transitions using beat tracking
+            if opt.get('analyze_tempo_changes', True):
+                self._detect_librosa_tempo_events(audio_data, timeline, source_tag)
+            else:
+                logger.debug("Skipping tempo change detection - disabled by optimization config")
             
-            # 3. Harmonic/key transitions using chroma analysis
-            self._detect_librosa_harmonic_events(audio_data, timeline, source_tag)
+            # 2. Conditional musical onsets and rhythm changes
+            if opt.get('analyze_onset_events', True):
+                self._detect_librosa_onset_events(audio_data, timeline, source_tag)
+            else:
+                logger.debug("Skipping onset event detection - disabled by optimization config")
             
-            # 4. Energy/volume transitions
-            self._detect_librosa_energy_events(audio_data, timeline, source_tag)
+            # 3. Conditional harmonic/key transitions using chroma analysis
+            if opt.get('analyze_harmonic_shifts', True):
+                self._detect_librosa_harmonic_events(audio_data, timeline, source_tag)
+            else:
+                logger.debug("Skipping harmonic shift detection - disabled by optimization config")
+            
+            # 4. Conditional energy/volume transitions
+            if opt.get('analyze_energy_transitions', True):
+                self._detect_librosa_energy_events(audio_data, timeline, source_tag)
+            else:
+                logger.debug("Skipping energy transition detection - disabled by optimization config")
             
         except Exception as e:
             logger.error(f"Enhanced music event detection failed: {e}")

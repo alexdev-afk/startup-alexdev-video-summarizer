@@ -257,16 +257,15 @@ audio_optimization:
     analyze_onset_events: true         # Keep - valuable for music analysis
     analyze_structural_segments: true  # Essential for music structure
     
-  # PyAudio on vocals.wav - Focus on speech only  
+  # PyAudio on vocals.wav - Focus on vocal emotion only (Whisper+pyannote handles speaker detection)
   pyaudio_voice:
-    analyze_speaker_changes: true     # Essential for speech
     analyze_emotion_changes: true     # Valuable for voice analysis
     analyze_sound_effects: false     # Skip - no sound effects in clean vocals
     analyze_music_features: false    # Skip - vocals track has no music
+    analyze_genre_classification: false # Skip - not applicable to vocals
     
   # PyAudio on no_vocals.wav - Focus on sound effects, music features, and genre
   pyaudio_music:
-    analyze_speaker_changes: false   # Skip - no speakers in music track
     analyze_emotion_changes: false   # Skip - not applicable to music
     analyze_sound_effects: true      # Keep - valuable for institutional knowledge
     analyze_music_features: true     # Essential for music classification

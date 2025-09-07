@@ -111,12 +111,25 @@ class PyAudioTimelineService:
             timeline.processing_notes.append(f"pyAudioAnalysis speech/sound analysis - sample_rate: {sample_rate}")
             timeline.processing_notes.append(f"Window: {self.window_size}s, Step: {self.step_size}s, Analysis window: {self.analysis_window}s")
             
-            # Generate audio events using real pyAudioAnalysis ML models
+            # Generate audio events using real pyAudioAnalysis ML models with conditional detection
             assert source_tag, "source_tag is required for timeline generation"
+            
+            # Apply conditional detection based on optimization config
+            opt = optimization or {}
+            
+            # Always run basic audio event detection
             self._detect_pyaudio_audio_events(audio_data, sample_rate, timeline, source_tag)
-            self._detect_pyaudio_speaker_changes(audio_data, sample_rate, timeline, source_tag)
-            self._detect_pyaudio_speaker_emotion_events(audio_data, sample_rate, timeline, source_tag)
-            self._detect_pyaudio_environment_spans(audio_data, sample_rate, timeline, source_tag)
+            
+            # Conditional detection based on optimization flags
+            if opt.get('analyze_emotion_changes', True):
+                self._detect_pyaudio_speaker_emotion_events(audio_data, sample_rate, timeline, source_tag)
+            else:
+                logger.debug("Skipping emotion detection - disabled by optimization config")
+                
+            if opt.get('analyze_genre_classification', True):
+                self._detect_pyaudio_environment_spans(audio_data, sample_rate, timeline, source_tag) 
+            else:
+                logger.debug("Skipping environment/genre classification - disabled by optimization config")
             
             processing_time = time.time() - start_time
             logger.info(f"pyAudioAnalysis timeline generated: {len(timeline.events)} events, {len(timeline.spans)} spans in {processing_time:.2f}s")
@@ -514,74 +527,6 @@ class PyAudioTimelineService:
         except Exception as e:
             logger.error(f"Enhanced audio event detection failed: {e}")
             raise PyAudioTimelineError(f"Enhanced audio event detection failed: {str(e)}") from e
-    
-    def _detect_pyaudio_speaker_changes(self, audio_data: np.ndarray, sample_rate: int, timeline: EnhancedTimeline, source_tag: str):
-        """
-        SPEAKER DIARIZATION - Voice Change Detection
-        
-        Detects changes in speaker identity using vocal characteristic analysis.
-        
-        Event Detection Logic:
-        - Analyzes vocal characteristics in sliding windows (3s window, 1.5s step)
-        - Extracts speaker features: energy, pitch (F0), zero-crossing rate, spectral centroid
-        - Compares feature vectors between consecutive windows
-        - Triggers event when feature change magnitude exceeds 0.5 threshold
-        - Uses Euclidean distance in normalized feature space for comparison
-        
-        Detected Events:
-        - "speaker_change": Different speaker detected based on vocal characteristics
-        - Confidence: 0.5-0.9 based on magnitude of feature change
-        - Includes detailed feature comparison data for analysis
-        
-        Use Cases: Speaker diarization, voice activity detection, multi-speaker content analysis
-        """
-        if not PYAUDIOANALYSIS_AVAILABLE:
-            raise PyAudioTimelineError("pyAudioAnalysis not available - cannot detect enhanced speaker changes")
-        
-        try:
-            # Analyze vocal characteristics over sliding windows
-            window_samples = int(self.analysis_window * sample_rate)
-            step_samples = int(self.overlap_window * sample_rate)
-            
-            vocal_features = []
-            timestamps = []
-            
-            for start_idx in range(0, len(audio_data) - window_samples, step_samples):
-                end_idx = start_idx + window_samples
-                window_audio = audio_data[start_idx:end_idx]
-                timestamp = start_idx / sample_rate
-                
-                # Extract vocal characteristics
-                features = self._extract_speaker_features(window_audio, sample_rate)
-                vocal_features.append(features)
-                timestamps.append(timestamp)
-            
-            # Detect speaker changes based on feature differences
-            for i in range(1, len(vocal_features)):
-                feature_change = self._calculate_speaker_feature_change(
-                    vocal_features[i-1], vocal_features[i]
-                )
-                
-                if feature_change > 0.5:  # Significant speaker change
-                    event = create_pyaudio_event(
-                        timestamp=timestamps[i],
-                        event_type="speaker_change",
-                        confidence=min(0.9, 0.5 + feature_change),
-                        details={
-                            "feature_change_magnitude": float(feature_change),
-                            "analysis_type": "speaker_diarization",
-                            "previous_speaker_features": vocal_features[i-1],
-                            "new_speaker_features": vocal_features[i]
-                        },
-                        source=source_tag
-                    )
-                    timeline.add_event(event)
-            
-            logger.debug(f"Detected {len([e for e in timeline.events if e.details.get('analysis_type') == 'speaker_diarization'])} speaker changes")
-            
-        except Exception as e:
-            logger.error(f"Enhanced speaker change detection failed: {e}")
-            raise PyAudioTimelineError(f"Enhanced speaker change detection failed: {str(e)}") from e
     
     def _detect_pyaudio_speaker_emotion_events(self, audio_data: np.ndarray, sample_rate: int, timeline: EnhancedTimeline, source_tag: str):
         """
@@ -1007,60 +952,6 @@ class PyAudioTimelineService:
         except Exception as e:
             logger.debug(f"Genre classification failed: {e}")
             return 'unknown', 0.5
-    
-    def _extract_speaker_features(self, audio_data: np.ndarray, sample_rate: int) -> Dict[str, float]:
-        """Extract speaker-specific features for diarization"""
-        try:
-            # Basic speaker characteristics
-            rms_energy = np.sqrt(np.mean(audio_data ** 2))
-            f0 = self._estimate_f0(audio_data, sample_rate)
-            zero_crossing_rate = len(np.where(np.diff(np.signbit(audio_data)))[0]) / len(audio_data)
-            
-            # Spectral characteristics
-            fft = np.fft.fft(audio_data)
-            magnitude = np.abs(fft[:len(fft)//2])
-            spectral_centroid = np.sum(magnitude * np.arange(len(magnitude))) / np.sum(magnitude) if np.sum(magnitude) > 0 else 0
-            
-            return {
-                'energy': float(rms_energy),
-                'pitch': float(f0),
-                'zero_crossing': float(zero_crossing_rate),
-                'spectral_centroid': float(spectral_centroid)
-            }
-            
-        except Exception:
-            return {'energy': 0.0, 'pitch': 0.0, 'zero_crossing': 0.0, 'spectral_centroid': 0.0}
-    
-    def _calculate_speaker_feature_change(self, features1: Dict[str, float], features2: Dict[str, float]) -> float:
-        """Calculate magnitude of change between speaker features"""
-        try:
-            changes = []
-            for key in ['energy', 'pitch', 'zero_crossing', 'spectral_centroid']:
-                val1 = features1.get(key, 0)
-                val2 = features2.get(key, 0)
-                if val1 > 0 and val2 > 0:
-                    change = abs(val2 - val1) / max(val1, val2)
-                    changes.append(change)
-            
-            return float(np.mean(changes)) if changes else 0.0
-        except:
-            return 0.0
-    
-    def _estimate_f0(self, audio_data: np.ndarray, sample_rate: int) -> float:
-        """Estimate fundamental frequency using autocorrelation"""
-        try:
-            autocorr = np.correlate(audio_data, audio_data, mode='full')
-            autocorr = autocorr[len(autocorr)//2:]
-            
-            min_period = int(sample_rate / 400)  # 400 Hz max
-            max_period = int(sample_rate / 50)   # 50 Hz min
-            
-            if max_period < len(autocorr):
-                peak_idx = np.argmax(autocorr[min_period:max_period]) + min_period
-                return sample_rate / peak_idx
-            return 0.0
-        except:
-            return 0.0
     
     def _describe_audio_event(self, event_type: str) -> str:
         """Create descriptive text for detected audio event"""
