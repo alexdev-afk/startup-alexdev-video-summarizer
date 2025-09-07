@@ -217,7 +217,8 @@ class KnowledgeGenerator:
         # Technical metadata
         lines.append("## Technical Metadata")
         lines.append("")
-        lines.append(f"- **Processing Date**: {json.dumps(audio_data.get('processing_timestamp', 'Unknown'), default=str).strip('\"')}")
+        processing_date = json.dumps(audio_data.get('processing_timestamp', 'Unknown'), default=str).strip('"')
+        lines.append(f"- **Processing Date**: {processing_date}")
         lines.append(f"- **Total Duration**: {audio_data.get('total_duration', 0):.1f} seconds")
         
         # Video analysis metadata
