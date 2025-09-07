@@ -90,26 +90,42 @@ class AudioTimelineMergerService:
             all_events = []
             
             for timeline in timelines:
-                # Add all events from this timeline
+                # Add all top-level events from this timeline
                 for event in timeline.events:
                     all_events.append(event)
-                    logger.debug(f"Added event from {timeline.sources_used}: {event.description} at {event.timestamp}s")
+                    logger.debug(f"Added top-level event from {timeline.sources_used}: {event.description} at {event.timestamp}s")
+                
+                # CRITICAL FIX: Also extract events from spans (Whisper timeline stores events in spans)
+                for span in timeline.spans:
+                    for event in span.events:
+                        all_events.append(event)
+                        logger.debug(f"Added span event from {timeline.sources_used}: {event.description} at {event.timestamp}s")
             
             # Sort events chronologically
             all_events.sort(key=lambda e: e.timestamp)
             combined_timeline.events = all_events
             
-            # No spans needed - just clean chronological events!
-            combined_timeline.spans = []
+            # CRITICAL FIX: Also collect all spans (Whisper timeline provides speech spans)
+            all_spans = []
+            for timeline in timelines:
+                for span in timeline.spans:
+                    all_spans.append(span)
+                    logger.debug(f"Added span from {timeline.sources_used}: {span.description} from {span.start}s to {span.end}s")
+            
+            # Sort spans chronologically
+            all_spans.sort(key=lambda s: s.start)
+            combined_timeline.spans = all_spans
             
             # Add processing notes
             combined_timeline.processing_notes.append("DEMUCS BREAKTHROUGH: Simple chronological merger - no heuristic filtering needed")
             combined_timeline.processing_notes.append(f"Clean sources: {list(unique_sources)}")
             combined_timeline.processing_notes.append(f"Total events: {len(all_events)} chronologically ordered")
+            combined_timeline.processing_notes.append(f"Total spans: {len(all_spans)} chronologically ordered")
             
             processing_time = time.time() - start_time
             logger.info(f"DEMUCS BREAKTHROUGH: Simple merge completed in {processing_time:.2f}s")
-            logger.info(f"Result: {len(all_events)} clean events, 0 spans (no complex filtering needed)")
+            logger.info(f"Result: {len(all_events)} clean events, {len(all_spans)} spans (no complex filtering needed)")
+            logger.info("FIXED: Whisper timeline events now properly included from spans")
             
             # Save if output path provided
             if output_path:
