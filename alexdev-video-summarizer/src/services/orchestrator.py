@@ -247,18 +247,55 @@ class VideoProcessingOrchestrator:
             # Step 4: Knowledge Base Generation
             progress_callback('knowledge_generation', {'stage': 'starting'})
             
-            # Find the timeline files for knowledge generation
+            # Generate combined knowledge file from all available timeline sources
             audio_timeline_path = context.build_directory / "audio_timelines" / "combined_audio_timeline.json"
             video_timeline_path = context.build_directory / "video_timelines" 
             
-            # Look for contextual, noncontextual, and vid2seq video timeline files
+            # Collect all available video timeline sources
+            video_timeline_sources = {}
+            
+            # Look for InternVL3 timeline files
             contextual_files = list(video_timeline_path.glob("*_contextual.json"))
             noncontextual_files = list(video_timeline_path.glob("*_noncontextual.json"))
-            vid2seq_files = list(video_timeline_path.glob("vid2seq_timeline.json"))
+            legacy_files = list(video_timeline_path.glob("video_timeline.json"))
             
+            if contextual_files:
+                latest_contextual = max(contextual_files, key=lambda f: f.stat().st_mtime)
+                video_timeline_sources['contextual_vlm'] = latest_contextual
+                
+            if noncontextual_files:
+                latest_noncontextual = max(noncontextual_files, key=lambda f: f.stat().st_mtime)
+                video_timeline_sources['noncontextual_vlm'] = latest_noncontextual
+                
+            if legacy_files and not contextual_files and not noncontextual_files:
+                latest_legacy = max(legacy_files, key=lambda f: f.stat().st_mtime)
+                video_timeline_sources['internvl3'] = latest_legacy
+            
+            # Look for Vid2Seq timeline files
+            vid2seq_files = list(video_timeline_path.glob("vid2seq_timeline.json"))
+            if vid2seq_files:
+                latest_vid2seq = max(vid2seq_files, key=lambda f: f.stat().st_mtime)
+                video_timeline_sources['vid2seq'] = latest_vid2seq
+            
+            # Generate single comprehensive knowledge file
             knowledge_file = None
             
-            # Process contextual version if available
+            if video_timeline_sources:
+                output_path = Path("output") / f"{context.video_name}_knowledge.md"
+                output_path.parent.mkdir(exist_ok=True)
+                
+                with self._suppress_service_logging():
+                    self.knowledge_generator.generate_combined_knowledge(
+                        audio_timeline_path, video_timeline_sources, context.video_name, output_path
+                    )
+                knowledge_file = output_path
+                
+                sources_summary = ", ".join(video_timeline_sources.keys())
+                logger.info(f"Generated comprehensive knowledge file: {output_path} (sources: {sources_summary})")
+            else:
+                logger.warning("No video timeline sources found for knowledge generation")
+            
+            # REMOVED: Old separate file generation logic - now using single combined file
             if contextual_files:
                 latest_contextual = max(contextual_files, key=lambda f: f.stat().st_mtime)
                 output_path = Path("output") / f"{context.video_name}_knowledge_contextualvlm.md"
