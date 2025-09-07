@@ -74,7 +74,7 @@ class EnhancedWhisperTimelineService:
             whisper_result = self.whisper_service.transcribe_audio(audio_path, scene_info)
             
             # Create enhanced timeline first
-            timeline = self._create_enhanced_timeline(whisper_result, audio_path, \"whisper\")
+            timeline = self._create_enhanced_timeline(whisper_result, audio_path, "whisper")
             
             return timeline
             
@@ -134,7 +134,9 @@ class EnhancedWhisperTimelineService:
         reconstruct the original VAD boundaries for timeline structure.
         """
         
-        assert source_tag, \"source_tag is required\"\n        \n        # Group segments by VAD chunk ID to maintain 1:1 VAD region to timeline span mapping
+        assert source_tag, "source_tag is required"
+        
+        # Group segments by VAD chunk ID to maintain 1:1 VAD region to timeline span mapping
         vad_groups = {}
         for segment in segments:
             vad_chunk_id = segment.get('vad_chunk_id', 0)
