@@ -953,6 +953,22 @@ class PyAudioTimelineService:
             logger.debug(f"Genre classification failed: {e}")
             return 'unknown', 0.5
     
+    def _estimate_f0(self, audio_data: np.ndarray, sample_rate: int) -> float:
+        """Estimate fundamental frequency using autocorrelation (needed for emotion detection)"""
+        try:
+            autocorr = np.correlate(audio_data, audio_data, mode='full')
+            autocorr = autocorr[len(autocorr)//2:]
+            
+            min_period = int(sample_rate / 400)  # 400 Hz max
+            max_period = int(sample_rate / 50)   # 50 Hz min
+            
+            if max_period < len(autocorr):
+                peak_idx = np.argmax(autocorr[min_period:max_period]) + min_period
+                return sample_rate / peak_idx
+            return 0.0
+        except:
+            return 0.0
+
     def _describe_audio_event(self, event_type: str) -> str:
         """Create descriptive text for detected audio event"""
         descriptions = {
