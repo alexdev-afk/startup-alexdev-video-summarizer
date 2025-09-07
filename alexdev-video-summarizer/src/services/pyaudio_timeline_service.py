@@ -30,6 +30,9 @@ except ImportError:
 
 PYAUDIOANALYSIS_AVAILABLE = PYAUDIOANALYSIS_FULL and SCIPY_AVAILABLE
 
+# Note: ML emotion detection moved to separate wav2vec2_voice_service.py
+# This service maintains pure heuristic approach for fallback compatibility
+
 from utils.logger import get_logger
 from utils.timeline_schema import ServiceTimeline, TimelineEvent, TimelineSpan
 from utils.enhanced_timeline_schema import EnhancedTimeline, create_pyaudio_event, create_pyaudio_span
@@ -77,7 +80,7 @@ class PyAudioTimelineService:
         self.analysis_window = self.pyaudio_config.get('analysis_window', 3.0)  # seconds
         self.overlap_window = self.pyaudio_config.get('overlap_window', 1.5)   # seconds
         
-        logger.info(f"pyAudioAnalysis timeline service initialized - window: {self.window_size}s, event_detection: enabled, available: {PYAUDIOANALYSIS_AVAILABLE}")
+        logger.info(f"pyAudioAnalysis timeline service initialized - window: {self.window_size}s, heuristic_analysis: enabled, available: {PYAUDIOANALYSIS_AVAILABLE}")
     
     def generate_and_save(self, audio_path: str, source_tag: Optional[str] = None, optimization: Optional[Dict] = None) -> EnhancedTimeline:
         """
@@ -881,7 +884,8 @@ class PyAudioTimelineService:
     
     def _classify_emotion(self, audio_data: np.ndarray, sample_rate: int) -> Tuple[str, float]:
         """
-        Classify emotion using real pyAudioAnalysis emotion models
+        Classify emotion using heuristic approach (30% accuracy)
+        Note: For ML emotion detection (85-90% accuracy), use wav2vec2_voice_service instead
         """
         try:
             # Extract prosodic features for emotion classification

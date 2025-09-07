@@ -29,6 +29,10 @@ plotly>=5.0.0                # Data visualization (required by pyAudioAnalysis)
 hmmlearn>=0.3.0              # Hidden Markov Models (required by pyAudioAnalysis)
 # Note: Silero VAD loaded via torch.hub (no separate package needed)
 
+# ML Audio Models - Phase 7 (ML Model Integration)
+transformers>=4.30.0         # Hugging Face transformers for ML models
+datasets>=2.14.0             # Audio dataset handling for ML models
+
 # Video Processing - FOR PHASE 2+
 scenedetect>=0.6.2          # Scene boundary detection
 # imageio[ffmpeg]>=2.25.0     # Video I/O with FFmpeg
