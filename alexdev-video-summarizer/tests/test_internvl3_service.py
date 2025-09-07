@@ -50,6 +50,10 @@ def test_contextual_vlm_prompting():
     # Test contextual prompting strategy
     test_contextual_prompting_strategy(frame_files, audio_context)
 
+def get_audio_context_for_timestamp(timestamp):
+    """Extract relevant audio context for a specific timestamp"""
+    return f"Audio at {timestamp:.2f}s: Discussion about salon creation and industry practices"
+
 def test_contextual_prompting_strategy(frame_files, audio_context):
     """Test the 3-stage contextual prompting strategy"""
     print(f"\n=== CONTEXTUAL PROMPTING STRATEGY TEST ===")
