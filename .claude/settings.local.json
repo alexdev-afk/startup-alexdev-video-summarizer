@@ -106,7 +106,16 @@
       "Read(/C:\\n8n_shared\\dev\\startup-alexdev-video-summarizer\\references\\whisper-transcriber/**)",
       "Read(/C:\\n8n_shared\\dev\\startup-alexdev-video-summarizer\\references\\whisper-transcriber/**)",
       "Read(/C:\\n8n_shared\\dev\\startup-alexdev-video-summarizer\\references\\ffmpeg-napoleon-scripts/**)",
-      "Read(/C:\\n8n_shared\\dev\\startup-alexdev-video-summarizer\\references\\ffmpeg-napoleon-scripts/**)"
+      "Read(/C:\\n8n_shared\\dev\\startup-alexdev-video-summarizer\\references\\ffmpeg-napoleon-scripts/**)",
+      "Read(//c/n8n_shared/dev/startup-alexdev-video-summarizer/**)",
+      "Bash(python test_ml_emotion.py:*)",
+      "Bash(python test_wav2vec2_timeline.py:*)",
+      "Bash(timeout 300 python test_wav2vec2_timeline.py)",
+      "Bash(python:*)",
+      "Bash(find:*)",
+      "Bash(timeout 30 python:*)",
+      "Bash(timeout:*)",
+      "Bash(git rm:*)"
     ],
     "deny": [],
     "ask": []

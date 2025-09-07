@@ -8,9 +8,12 @@ Implements 3-screen workflow:
 """
 
 import os
+import sys
 import time
+import contextlib
 from pathlib import Path
 from typing import List, Dict, Any
+from io import StringIO
 
 from rich.console import Console
 from rich.table import Table
@@ -160,10 +163,11 @@ class VideoProcessorCLI:
                 # Show current video header
                 progress_display.show_video_header(i, len(videos), video.name)
                 
-                # Process video with real-time updates
-                result = self.orchestrator.process_video_with_progress(
-                    video, progress_display.update_pipeline_progress
-                )
+                # Process video with real-time updates (suppress stdout/stderr)
+                with self._suppress_output():
+                    result = self.orchestrator.process_video_with_progress(
+                        video, progress_display.update_pipeline_progress
+                    )
                 
                 if result.success:
                     results['successful'].append((video.name, result))
@@ -227,9 +231,19 @@ class VideoProcessorCLI:
         
         # Show successful outputs
         if successful_count > 0:
+            # List actual knowledge files generated
+            knowledge_files = []
+            for name, result in results['successful']:
+                video_name = Path(name).stem
+                # Current pipeline generates multiple knowledge files
+                knowledge_files.extend([
+                    f"- output/{video_name}_knowledge_noncontextualvlm.md",
+                    f"- output/{video_name}_knowledge_vid2seq.md"
+                ])
+            
             output_panel = Panel(
                 f"[FILES] [bold]Knowledge Base Files Created:[/bold]\n"
-                + "\n".join([f"- output/{name}.md" for name, _ in results['successful']]),
+                + "\n".join(knowledge_files),
                 title="Output Files",
                 border_style="green"
             )
@@ -245,22 +259,36 @@ class VideoProcessorCLI:
             )
             self.console.print(failed_panel)
             
-        # Claude synthesis handoff message
+        # Processing summary
         if successful_count > 0:
-            claude_panel = Panel(
-                "🧠 [bold cyan]READY FOR CLAUDE SYNTHESIS[/bold cyan]\n\n"
-                "Next Steps:\n"
-                f"1. Processed video data is ready in build/ directory\n"
-                f"2. {successful_count} video(s) ready for knowledge synthesis\n"
-                f"3. Use Claude to create TodoWrite tasks for video synthesis\n"
-                f"4. Each video will become a comprehensive .md knowledge base\n\n"
-                "[TODO] Claude: Please create synthesis todos for each processed video",
-                title="Claude Integration Ready",
-                border_style="cyan"
+            summary_panel = Panel(
+                f"🎉 [bold green]PROCESSING COMPLETE[/bold green]\n\n"
+                f"Successfully processed {successful_count} video(s):\n"
+                f"- Knowledge files: output/*.md\n"
+                f"- Timeline data: build/*/\n"
+                f"- Total processing time: {results['total_time']/60:.1f} minutes\n\n"
+                f"[bold]Ready for analysis and review![/bold]",
+                title="Success Summary",
+                border_style="green"
             )
-            self.console.print(claude_panel)
+            self.console.print(summary_panel)
             
         self.console.print(f"\n[OUTPUT] Output directory: {self.output_dir}")
+        
+    @contextlib.contextmanager
+    def _suppress_output(self):
+        """Context manager to suppress stdout/stderr during processing"""
+        old_stdout = sys.stdout
+        old_stderr = sys.stderr
+        try:
+            # Redirect stdout/stderr to string buffers
+            sys.stdout = StringIO()
+            sys.stderr = StringIO()
+            yield
+        finally:
+            # Restore original stdout/stderr
+            sys.stdout = old_stdout
+            sys.stderr = old_stderr
         
     def show_dry_run_results(self, videos: List[Path]):
         """Show what would be processed without executing"""

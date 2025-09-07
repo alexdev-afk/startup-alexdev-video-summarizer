@@ -73,15 +73,15 @@ class ProgressDisplay:
         table.add_column("Status", style="bold")
         table.add_column("Details")
         
-        # Define pipeline stages in order
+        # Define pipeline stages in order (matches orchestrator.py)
         stages = [
             ('initializing', 'Setup', '⚙️'),
             ('ffmpeg', 'FFmpeg', '🎞️'),
-            ('scene_detection', 'PySceneDetect', '[SCENE]'),
-            ('scene_processing', 'Scene Analysis', '[ANALYSIS]'),
-            ('audio_pipeline', 'Audio Pipeline', '🎵'),
-            ('video_gpu_pipeline', 'Video GPU Pipeline', '🖥️'),
-            ('video_cpu_pipeline', 'Video CPU Pipeline', '👁️'),
+            ('scene_detection', 'PySceneDetect', '🎬'),
+            ('demucs_separation', 'Demucs', '🎵'),
+            ('audio_processing', 'Audio Pipeline', '🎧'),
+            ('frame_extraction', 'Frame Extraction', '🖼️'),
+            ('video_processing', 'VLM Processing', '🤖'),
             ('knowledge_generation', 'Knowledge Base', '📚')
         ]
         
@@ -116,30 +116,52 @@ class ProgressDisplay:
             
     def _get_completion_details(self, stage: str, data: Dict[str, Any]) -> str:
         """Get completion details for a stage"""
-        if stage == 'scene_detection':
+        if stage == 'ffmpeg':
+            return "Audio/video extracted"
+        elif stage == 'scene_detection':
             return f"{data.get('scene_count', 0)} scenes detected"
-        elif stage == 'scene_processing':
-            scene = data.get('scene', 0)
-            total = data.get('total_scenes', 0)
-            return f"Scene {scene}/{total} processed"
-        elif stage == 'audio_pipeline':
-            return "Whisper → LibROSA → pyAudioAnalysis complete"
-        elif stage == 'video_gpu_pipeline':
-            return "InternVL3 VLM complete"
-        elif stage == 'video_cpu_pipeline':
-            return "Visual analysis complete"
+        elif stage == 'demucs_separation':
+            vocals = data.get('vocals_file', 'vocals.wav')
+            instrumentals = data.get('instrumentals_file', 'no_vocals.wav')
+            return f"Clean separation: {vocals}, {instrumentals}"
+        elif stage == 'audio_processing':
+            sources = data.get('sources', [])
+            combined_events = data.get('combined_events', 0)
+            return f"{len(sources)} sources → {combined_events} events"
+        elif stage == 'frame_extraction':
+            frames = data.get('frames_extracted', 0)
+            return f"{frames} frames extracted"
+        elif stage == 'video_processing':
+            internvl3_events = data.get('internvl3_events_generated', 0)
+            vid2seq_events = data.get('vid2seq_events_generated', 0)
+            if vid2seq_events > 0:
+                return f"InternVL3: {internvl3_events}, Vid2Seq: {vid2seq_events} events"
+            else:
+                return f"InternVL3: {internvl3_events} events"
         elif stage == 'knowledge_generation':
-            file_name = data.get('file', 'knowledge_base.md')
-            return f"Created: {file_name}"
+            file_path = data.get('file')
+            if file_path:
+                return f"Created: {file_path.name if hasattr(file_path, 'name') else file_path}"
+            return "Knowledge files created"
         else:
             return "Complete"
             
     def _get_progress_details(self, stage: str, data: Dict[str, Any]) -> str:
         """Get progress details for a stage"""
-        if stage == 'scene_processing':
-            scene = data.get('scene', 0)
-            total = data.get('total_scenes', 0)
-            return f"Processing scene {scene}/{total}"
+        if stage == 'video_processing':
+            processing_mode = data.get('processing_mode', '')
+            if 'internvl3' in processing_mode:
+                return "InternVL3 frame analysis"
+            elif 'vid2seq' in processing_mode:
+                return "Vid2Seq dense captioning"
+            else:
+                return "VLM processing"
+        elif stage == 'audio_processing':
+            approach = data.get('approach', '')
+            if 'demucs' in approach:
+                return "Clean audio source processing"
+            else:
+                return "Audio analysis"
         else:
             return "In progress..."
             
