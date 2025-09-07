@@ -295,61 +295,6 @@ class VideoProcessingOrchestrator:
             else:
                 logger.warning("No video timeline sources found for knowledge generation")
             
-            # REMOVED: Old separate file generation logic - now using single combined file
-            if contextual_files:
-                latest_contextual = max(contextual_files, key=lambda f: f.stat().st_mtime)
-                output_path = Path("output") / f"{context.video_name}_knowledge_contextualvlm.md"
-                output_path.parent.mkdir(exist_ok=True)
-                
-                with self._suppress_service_logging():
-                    self.knowledge_generator.generate_timeline_from_files(
-                        audio_timeline_path, latest_contextual, context.video_name, output_path
-                    )
-                knowledge_file = output_path
-                logger.info(f"Generated contextual knowledge: {output_path}")
-            
-            # Process noncontextual version if available  
-            if noncontextual_files:
-                latest_noncontextual = max(noncontextual_files, key=lambda f: f.stat().st_mtime)
-                output_path = Path("output") / f"{context.video_name}_knowledge_noncontextualvlm.md"
-                output_path.parent.mkdir(exist_ok=True)
-                
-                with self._suppress_service_logging():
-                    self.knowledge_generator.generate_timeline_from_files(
-                        audio_timeline_path, latest_noncontextual, context.video_name, output_path
-                    )
-                knowledge_file = output_path  # Keep most recent as primary
-                logger.info(f"Generated noncontextual knowledge: {output_path}")
-            
-            # Process vid2seq version if available
-            if vid2seq_files:
-                latest_vid2seq = max(vid2seq_files, key=lambda f: f.stat().st_mtime)
-                output_path = Path("output") / f"{context.video_name}_knowledge_vid2seq.md"
-                output_path.parent.mkdir(exist_ok=True)
-                
-                with self._suppress_service_logging():
-                    self.knowledge_generator.generate_timeline_from_files(
-                        audio_timeline_path, latest_vid2seq, context.video_name, output_path
-                    )
-                knowledge_file = output_path  # Keep most recent as primary
-                logger.info(f"Generated vid2seq knowledge: {output_path}")
-            
-            # Fallback to legacy timeline files if no modern files found
-            if not contextual_files and not noncontextual_files and not vid2seq_files:
-                legacy_timeline_files = list(video_timeline_path.glob("video_timeline.json"))
-                if legacy_timeline_files:
-                    latest_timeline = max(legacy_timeline_files, key=lambda f: f.stat().st_mtime)
-                    output_path = Path("output") / f"{context.video_name}_knowledge.md"
-                    output_path.parent.mkdir(exist_ok=True)
-                    
-                    with self._suppress_service_logging():
-                        self.knowledge_generator.generate_timeline_from_files(
-                            audio_timeline_path, latest_timeline, context.video_name, output_path
-                        )
-                    knowledge_file = output_path
-                    logger.info(f"Generated legacy knowledge: {output_path}")
-                else:
-                    logger.warning("No video timeline found for knowledge generation")
                 
             progress_callback('knowledge_generation', {'stage': 'completed', 'file': knowledge_file})
             

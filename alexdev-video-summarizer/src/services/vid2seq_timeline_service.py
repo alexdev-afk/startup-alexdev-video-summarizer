@@ -164,7 +164,7 @@ class Vid2SeqTimelineService:
             
         except Exception as e:
             logger.error(f"Vid2Seq timeline generation failed: {e}")
-            return self._create_fallback_timeline(video_path, error=str(e))
+            raise Vid2SeqTimelineServiceError(f"Vid2Seq timeline generation failed: {str(e)}") from e
     
     def _process_video_with_vid2seq(self, video_path: str, timeline: EnhancedTimeline, total_duration: float):
         """Process video with Vid2Seq model (MOCK IMPLEMENTATION)"""
@@ -346,34 +346,6 @@ class Vid2SeqTimelineService:
             
         except Exception as e:
             logger.error(f"Failed to save Vid2Seq timeline: {e}")
-    
-    def _create_fallback_timeline(self, video_path: str, error: str = "") -> EnhancedTimeline:
-        """Create fallback timeline when Vid2Seq processing fails"""
-        
-        timeline = EnhancedTimeline(
-            audio_file=str(video_path).replace('video.mp4', 'audio.wav'),
-            total_duration=30.0
-        )
-        
-        timeline.sources_used.append(self.service_name)
-        timeline.processing_notes.append(f"Vid2Seq processing failed: {error}")
-        timeline.processing_notes.append("Fallback timeline created")
-        
-        # Add failure span
-        timeline.add_span(TimelineSpan(
-            start=0.0,
-            end=30.0,  # Full video duration
-            description="Vid2Seq dense video captioning failed - no timeline available",
-            source=self.service_name,
-            confidence=0.1,
-            details={
-                'analysis_type': 'processing_failure',
-                'error': error,
-                'fallback_mode': True
-            }
-        ))
-        
-        return timeline
     
     def cleanup(self):
         """Cleanup Vid2Seq model to free memory"""
