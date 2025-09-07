@@ -62,9 +62,9 @@ class EnhancedWhisperTimelineService:
             WhisperError: If transcription fails
         """
         # Delegate to generate_and_save without saving
-        return self._generate_timeline_internal(audio_path, scene_info, "whisper")
+        return self._generate_timeline_internal(audio_path, scene_info)
     
-    def _generate_timeline_internal(self, audio_path: Path, scene_info: Optional[Dict] = None, source_tag: str = "whisper") -> EnhancedTimeline:
+    def _generate_timeline_internal(self, audio_path: Path, scene_info: Optional[Dict] = None) -> EnhancedTimeline:
         """Internal method for timeline generation"""
         audio_path = Path(audio_path) if isinstance(audio_path, str) else audio_path
         logger.info(f"Generating enhanced Whisper timeline: {audio_path.name}")
@@ -74,7 +74,7 @@ class EnhancedWhisperTimelineService:
             whisper_result = self.whisper_service.transcribe_audio(audio_path, scene_info)
             
             # Create enhanced timeline first
-            timeline = self._create_enhanced_timeline(whisper_result, audio_path, source_tag)
+            timeline = self._create_enhanced_timeline(whisper_result, audio_path, \"whisper\")
             
             return timeline
             
@@ -82,7 +82,7 @@ class EnhancedWhisperTimelineService:
             logger.error(f"Enhanced timeline generation failed: {e}")
             raise WhisperError(f"Enhanced timeline generation failed: {str(e)}") from e
     
-    def _create_enhanced_timeline(self, whisper_result: Dict[str, Any], audio_path: Path, source_tag: str = "whisper") -> EnhancedTimeline:
+    def _create_enhanced_timeline(self, whisper_result: Dict[str, Any], audio_path: Path, source_tag: str) -> EnhancedTimeline:
         """Create enhanced timeline from whisper result"""
         # Extract global data
         total_duration = self._extract_duration(whisper_result)
@@ -107,7 +107,7 @@ class EnhancedWhisperTimelineService:
         
         # Convert segments to speech spans (Whisper's expertise)
         segments = whisper_result.get('segments', [])
-        self._add_speech_spans(timeline, segments)
+        self._add_speech_spans(timeline, segments, source_tag)
         
         # Add processing notes for auditing
         timeline.add_processing_note(f"Processed {len(segments)} Whisper segments from VAD regions")
@@ -125,7 +125,7 @@ class EnhancedWhisperTimelineService:
             return last_segment.get('end', 0)
         return 0.0
     
-    def _add_speech_spans(self, timeline: EnhancedTimeline, segments: List[Dict[str, Any]]):
+    def _add_speech_spans(self, timeline: EnhancedTimeline, segments: List[Dict[str, Any]], source_tag: str):
         """
         Add speech spans with VAD region reconstruction
         
@@ -134,7 +134,7 @@ class EnhancedWhisperTimelineService:
         reconstruct the original VAD boundaries for timeline structure.
         """
         
-        # Group segments by VAD chunk ID to maintain 1:1 VAD region to timeline span mapping
+        assert source_tag, \"source_tag is required\"\n        \n        # Group segments by VAD chunk ID to maintain 1:1 VAD region to timeline span mapping
         vad_groups = {}
         for segment in segments:
             vad_chunk_id = segment.get('vad_chunk_id', 0)
@@ -336,8 +336,9 @@ class EnhancedWhisperTimelineService:
             # Get transcription from WhisperService
             whisper_result = self.whisper_service.transcribe_audio(audio_path, scene_info)
             
-            # Create enhanced timeline
-            timeline = self._create_enhanced_timeline(whisper_result, audio_path, source_tag or "whisper")
+            # Create enhanced timeline with source tag
+            assert source_tag, "source_tag is required for timeline generation"
+            timeline = self._create_enhanced_timeline(whisper_result, audio_path, source_tag)
             
             # Save intermediate analysis file for auditing with timeline data
             self._save_intermediate_analysis(Path(audio_path), whisper_result, timeline, source_tag)

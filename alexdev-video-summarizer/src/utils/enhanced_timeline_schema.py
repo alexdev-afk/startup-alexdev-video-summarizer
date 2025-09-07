@@ -262,8 +262,9 @@ class EnhancedTimeline:
 
 
 # Utility functions for service integration
-def create_speech_span(start: float, end: float, text: str, speaker: str, confidence: float, source: str = "whisper") -> TimelineSpan:
-    """Create a speech span with configurable source"""
+def create_speech_span(start: float, end: float, text: str, speaker: str, confidence: float, source: str) -> TimelineSpan:
+    """Create a speech span with specified source"""
+    assert source, "source parameter is required"
     span = TimelineSpan(
         start=start,
         end=end,
@@ -280,8 +281,9 @@ def create_speech_span(start: float, end: float, text: str, speaker: str, confid
     return span
 
 
-def create_word_event(timestamp: float, word: str, confidence: float, speaker: str, source: str = "whisper") -> TimelineEvent:
-    """Create a word event with configurable source"""
+def create_word_event(timestamp: float, word: str, confidence: float, speaker: str, source: str) -> TimelineEvent:
+    """Create a word event with specified source"""
+    assert source, "source parameter is required"
     return TimelineEvent(
         timestamp=timestamp,
         description="Word",
@@ -291,8 +293,9 @@ def create_word_event(timestamp: float, word: str, confidence: float, speaker: s
     )
 
 
-def create_speaker_change_event(timestamp: float, prev_speaker: str, new_speaker: str, source: str = "whisper") -> TimelineEvent:
-    """Create a speaker change event with configurable source"""
+def create_speaker_change_event(timestamp: float, prev_speaker: str, new_speaker: str, source: str) -> TimelineEvent:
+    """Create a speaker change event with specified source"""
+    assert source, "source parameter is required"
     return TimelineEvent(
         timestamp=timestamp,
         description="Speaker Change",
