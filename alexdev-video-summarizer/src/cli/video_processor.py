@@ -10,6 +10,7 @@ Implements 3-screen workflow:
 import os
 import sys
 import time
+import shutil
 import contextlib
 from pathlib import Path
 from typing import List, Dict, Any
@@ -29,11 +30,12 @@ from utils.progress_display import ProgressDisplay
 class VideoProcessorCLI:
     """Main CLI interface for video processing"""
     
-    def __init__(self, input_path: str, output_dir: str, config: Dict[str, Any], dry_run: bool = False):
+    def __init__(self, input_path: str, output_dir: str, config: Dict[str, Any], dry_run: bool = False, verbose: bool = False):
         self.input_path = Path(input_path)
         self.output_dir = Path(output_dir)
         self.config = config
         self.dry_run = dry_run
+        self.verbose = verbose
         
         self.console = Console(force_terminal=True, width=120)
         self.orchestrator = VideoProcessingOrchestrator(config)
@@ -175,12 +177,20 @@ class VideoProcessorCLI:
                 else:
                     results['failed'].append((video.name, result))
                     progress_display.show_video_failure(video.name, result.error)
+                
+                # Clean up build directory after each video unless in verbose mode
+                if not self.verbose:
+                    self._cleanup_build_directory(video)
                     
             except KeyboardInterrupt:
                 raise
             except Exception as e:
                 results['failed'].append((video.name, str(e)))
                 progress_display.show_video_failure(video.name, str(e))
+                
+                # Clean up build directory after failed video unless in verbose mode
+                if not self.verbose:
+                    self._cleanup_build_directory(video)
                 
                 # Check circuit breaker
                 if self.orchestrator.should_abort_batch():
@@ -303,3 +313,17 @@ class VideoProcessorCLI:
         self.console.print(f"⏱️  Estimated time: {len(videos) * 10} minutes")
         self.console.print(f"[OUTPUT] Output: {self.output_dir}")
         self.console.print("\nRun without --dry-run to begin processing.")
+    
+    def _cleanup_build_directory(self, video_path: Path):
+        """Clean up build directory for specific video after processing (unless in verbose mode)"""
+        # Get video name without extension for build directory
+        video_name = video_path.stem
+        build_dir = Path("build") / video_name
+        
+        if build_dir.exists():
+            try:
+                shutil.rmtree(build_dir)
+                # Only show cleanup message in debug/dev contexts - not during normal processing
+            except Exception as e:
+                # Silently continue if cleanup fails - don't interrupt the user workflow
+                pass

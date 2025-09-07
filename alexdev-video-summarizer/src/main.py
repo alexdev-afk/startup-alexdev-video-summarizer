@@ -93,7 +93,8 @@ def main(input_path, output_dir, config_file, verbose, dry_run):
                 input_path=input_path,
                 output_dir=output_dir,
                 config=config,
-                dry_run=dry_run
+                dry_run=dry_run,
+                verbose=verbose
             )
         
         # Run processing pipeline
