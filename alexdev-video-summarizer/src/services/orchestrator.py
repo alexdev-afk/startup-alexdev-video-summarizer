@@ -319,19 +319,17 @@ class VideoProcessingOrchestrator:
                         except Exception as e:
                             logger.warning(f"Could not parse frame metadata: {e}")
                     
-                    # Copy frame files with timestamp-based naming
+                    # Copy only representative frames (those in our mapping)
                     copied_count = 0
                     for frame_file in frames_source_dir.glob("*.jpg"):
-                        # Use timestamp-based name if available, otherwise keep original
+                        # Only copy if this frame is mapped (representative frame)
                         if frame_file.name in frame_mapping:
                             output_name = frame_mapping[frame_file.name]
-                        else:
-                            output_name = frame_file.name
+                            output_frame = frames_output_dir / output_name
                             
-                        output_frame = frames_output_dir / output_name
-                        if not output_frame.exists():
-                            shutil.copy2(frame_file, output_frame)
-                            copied_count += 1
+                            if not output_frame.exists():
+                                shutil.copy2(frame_file, output_frame)
+                                copied_count += 1
                     
                     logger.info(f"Copied {copied_count} representative frames with timestamps to: {frames_output_dir}")
                 
