@@ -149,11 +149,12 @@ gpu_pipeline:
 
 # ML Models Configuration - Phase 7 (ML Model Integration)
 ml_models:
-  # ML Emotion Detection (replaces heuristic emotion detection)
+  # ML Emotion Detection (replaces heuristic emotion detection) - DISABLED: Model has config issues
   emotion:
-    model_name: "ehcalabres/wav2vec2-lg-xlsr-en-speech-emotion-recognition"  # Pre-trained emotion recognition model (8 emotions, 82% accuracy)
+    model_name: "ehcalabres/wav2vec2-lg-xlsr-en-speech-emotion-recognition"  # BROKEN: Missing vocab files
     device: "cuda"              # Use GPU for ML emotion detection (sequential with Whisper)
     cache_models: true          # Cache models for better performance
+    enabled: false              # DISABLED: wav2vec2 model has loading issues
     
     # Analysis parameters
     window_size: 5.0            # 5 second windows for stable emotion detection (larger than heuristic)
@@ -163,6 +164,38 @@ ml_models:
     # Model loading settings
     lazy_loading: true          # Load models only when needed
     sequential_gpu_usage: true  # Coordinate with other GPU models (Whisper, etc.)
+  
+  # ML Audio Event Classification (replaces heuristic sound effects detection) - DISABLED: Not better than LibROSA
+  ast_audio_events:
+    model_name: "MIT/ast-finetuned-audioset-10-10-0.4593"  # AST-AudioSet model (527 classes, 95% accuracy)
+    device: "cuda"              # Use GPU for ML audio classification (sequential processing)
+    cache_models: true          # Cache models for better performance
+    enabled: false              # DISABLED: Not better than existing LibROSA analysis
+    
+    # Analysis parameters
+    window_size: 10.0           # 10 second windows for AudioSet analysis (longer for sound context)
+    overlap: 5.0                # 5 second overlap for sound event continuity
+    confidence_threshold: 0.3   # Lower threshold for sound effects detection (more sensitive)
+    
+    # Model loading settings
+    lazy_loading: true          # Load models only when needed
+    sequential_gpu_usage: true  # Coordinate with other GPU models (Whisper, emotion, etc.)
+  
+  # ML Music Understanding (replaces heuristic music features + genre classification) - DISABLED: Not better than PyAudio
+  mert_music:
+    model_name: "m-a-p/MERT-v1-330M"  # MERT music understanding model (50+ genres, comprehensive music analysis)
+    device: "cuda"              # Use GPU for ML music understanding (sequential processing)
+    cache_models: true          # Cache models for better performance
+    enabled: false              # DISABLED: Not better than existing PyAudio + LibROSA analysis
+    
+    # Analysis parameters
+    window_size: 15.0           # 15 second windows for music analysis (longer for musical context)
+    overlap: 7.5                # 7.5 second overlap for music continuity
+    confidence_threshold: 0.4   # Music classification confidence threshold
+    
+    # Model loading settings
+    lazy_loading: true          # Load models only when needed
+    sequential_gpu_usage: true  # Coordinate with other GPU models (Whisper, emotion, AST, etc.)
 
 # CPU Pipeline Configuration
 cpu_pipeline:

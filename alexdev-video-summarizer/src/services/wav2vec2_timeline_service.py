@@ -51,8 +51,8 @@ class Wav2Vec2TimelineService:
         self.config = config
         self.ml_config = config.get('ml_models', {}).get('emotion', {})
         
-        # Model configuration
-        self.model_name = self.ml_config.get('model_name', 'facebook/wav2vec2-large-960h-emotion')
+        # Model configuration  
+        self.model_name = self.ml_config.get('model_name', 'ehcalabres/wav2vec2-lg-xlsr-en-speech-emotion-recognition')
         self.device = self.ml_config.get('device', 'cuda' if torch.cuda.is_available() else 'cpu')
         self.cache_models = self.ml_config.get('cache_models', True)
         
@@ -148,18 +148,41 @@ class Wav2Vec2TimelineService:
         
         try:
             logger.info(f"Loading ML emotion model: {self.model_name}")
+            logger.info(f"Model name type: {type(self.model_name)}")
+            if self.model_name is None:
+                logger.error(f"Model name is None! ml_config: {self.ml_config}")
+                logger.error(f"Full config: {self.config.get('ml_models', {})}")
+                raise Wav2Vec2TimelineError("Model name is None during loading")
+            
             start_time = time.time()
             
             # Load processor and model
+            logger.info(f"Loading processor from: {self.model_name}")
+            logger.info(f"About to call Wav2Vec2Processor.from_pretrained with: {repr(self.model_name)}")
+            logger.info(f"Type check: {type(self.model_name)}")
+            print(f"DEBUG PRINT: About to load processor with model_name: {repr(self.model_name)}")
             self.processor = Wav2Vec2Processor.from_pretrained(self.model_name)
+            
+            logger.info(f"Loading model from: {self.model_name}")
             self.model = Wav2Vec2ForSequenceClassification.from_pretrained(self.model_name)
+            
+            logger.info(f"Model config: {self.model.config}")
+            logger.info(f"Model config id2label: {getattr(self.model.config, 'id2label', 'NOT_FOUND')}")
             
             # Move to appropriate device
             self.model.to(self.device)
             self.model.eval()  # Set to evaluation mode
             
             # Extract emotion labels from model config
-            self.emotion_labels = self.model.config.id2label
+            if hasattr(self.model.config, 'id2label') and self.model.config.id2label:
+                self.emotion_labels = self.model.config.id2label
+            else:
+                # Fallback labels for ehcalabres/wav2vec2-lg-xlsr-en-speech-emotion-recognition
+                self.emotion_labels = {
+                    0: "angry", 1: "calm", 2: "disgust", 3: "fearful", 
+                    4: "happy", 5: "neutral", 6: "sad", 7: "surprised"
+                }
+                logger.warning("Model config missing id2label, using fallback emotion labels")
             
             load_time = time.time() - start_time
             logger.info(f"ML emotion model loaded in {load_time:.2f}s - labels: {list(self.emotion_labels.values())}")
@@ -170,7 +193,7 @@ class Wav2Vec2TimelineService:
     
     def classify_emotion_ml(self, audio_data: np.ndarray, sample_rate: int) -> Tuple[str, float, Dict[str, float]]:
         """
-        Classify emotion using ML model instead of heuristics
+        Classify emotion using ML model
         
         Args:
             audio_data: Audio samples as numpy array
@@ -180,8 +203,7 @@ class Wav2Vec2TimelineService:
             Tuple of (emotion, confidence, all_probabilities)
         """
         if not ML_MODELS_AVAILABLE:
-            # Fallback to heuristic approach
-            return self._fallback_heuristic_emotion(audio_data, sample_rate)
+            raise Wav2Vec2TimelineError("ML models not available - transformers/soundfile not installed")
         
         try:
             # Ensure model is loaded
@@ -189,7 +211,7 @@ class Wav2Vec2TimelineService:
             
             # Preprocess audio for model
             if len(audio_data) == 0:
-                return 'neutral', 0.5, {'neutral': 0.5}
+                raise Wav2Vec2TimelineError("Empty audio data provided")
             
             # Resample if needed (wav2vec2 expects 16kHz)
             target_rate = 16000
@@ -226,11 +248,10 @@ class Wav2Vec2TimelineService:
             return best_emotion, confidence, emotion_probs
             
         except Exception as e:
-            logger.error(f"ML emotion classification failed: {e}")
-            # Fallback to heuristic approach
-            return self._fallback_heuristic_emotion(audio_data, sample_rate)
+            logger.error(f"Wav2Vec2 emotion classification failed: {e}")
+            raise
     
-    def analyze_emotion_timeline(self, audio_path: str, source_tag: str = "ml_emotion") -> List[Dict[str, Any]]:
+    def analyze_emotion_timeline(self, audio_path: str, source_tag: str = "wav2vec2_emotion") -> List[Dict[str, Any]]:
         """
         Analyze emotion changes over time using ML model
         
@@ -241,148 +262,56 @@ class Wav2Vec2TimelineService:
         Returns:
             List of emotion change events with ML confidence scores
         """
-        try:
-            # Load audio file
-            audio_data, sample_rate = self._load_audio_file(audio_path)
-            if audio_data is None:
-                return []
-            
-            # Analyze in sliding windows
-            window_samples = int(self.window_size * sample_rate)
-            step_samples = int((self.window_size - self.overlap) * sample_rate)
-            
-            emotion_events = []
-            previous_emotion = None
-            
-            for start_idx in range(0, len(audio_data) - window_samples, step_samples):
-                end_idx = start_idx + window_samples
-                window_audio = audio_data[start_idx:end_idx]
-                timestamp = start_idx / sample_rate
-                
-                # Get ML emotion classification
-                emotion, confidence, all_probs = self.classify_emotion_ml(window_audio, sample_rate)
-                
-                # Only trigger event if emotion changes and confidence is high enough
-                if emotion != previous_emotion and confidence > self.confidence_threshold:
-                    emotion_event = {
-                        "timestamp": timestamp,
-                        "emotion": emotion,
-                        "previous_emotion": previous_emotion,
-                        "confidence": confidence,
-                        "all_probabilities": all_probs,
-                        "analysis_type": "ml_emotion_detection",
-                        "model_name": self.model_name,
-                        "source": source_tag
-                    }
-                    emotion_events.append(emotion_event)
-                    previous_emotion = emotion
-            
-            logger.info(f"Wav2Vec2 emotion analysis complete: {len(emotion_events)} emotion changes detected")
-            return emotion_events
-            
-        except Exception as e:
-            logger.error(f"Wav2Vec2 emotion timeline analysis failed: {e}")
-            return []
-    
-    def _load_audio_file(self, audio_path: str) -> Tuple[Optional[np.ndarray], int]:
-        """Load audio file using soundfile"""
-        try:
-            if not ML_MODELS_AVAILABLE:
-                # Use scipy.io.wavfile as fallback
-                import scipy.io.wavfile as wavfile
-                sample_rate, audio_data = wavfile.read(audio_path)
-                
-                # Convert to float
-                if audio_data.dtype == np.int16:
-                    audio_data = audio_data.astype(np.float32) / 32768.0
-                elif audio_data.dtype == np.int32:
-                    audio_data = audio_data.astype(np.float32) / 2147483648.0
-                
-                # Handle stereo
-                if len(audio_data.shape) > 1:
-                    audio_data = np.mean(audio_data, axis=1)
-                
-                return audio_data, sample_rate
-            
-            # Use soundfile for better format support
-            audio_data, sample_rate = sf.read(audio_path)
-            
-            # Convert to mono if stereo
-            if len(audio_data.shape) > 1:
-                audio_data = np.mean(audio_data, axis=1)
-            
-            return audio_data, sample_rate
-            
-        except Exception as e:
-            logger.error(f"Failed to load audio file {audio_path}: {e}")
-            return None, 0
-    
-    def _fallback_heuristic_emotion(self, audio_data: np.ndarray, sample_rate: int) -> Tuple[str, float, Dict[str, float]]:
-        """
-        Fallback heuristic emotion detection when ML model unavailable
+        # Load audio file - will raise exception if fails
+        audio_data, sample_rate = self._load_audio_file(audio_path)
         
-        This maintains compatibility while providing lower accuracy results.
-        """
-        try:
-            # Extract basic prosodic features
-            rms_energy = np.sqrt(np.mean(audio_data ** 2))
-            zero_crossing_rate = len(np.where(np.diff(np.signbit(audio_data)))[0]) / len(audio_data)
+        # Analyze in sliding windows
+        window_samples = int(self.window_size * sample_rate)
+        step_samples = int((self.window_size - self.overlap) * sample_rate)
+        
+        emotion_events = []
+        previous_emotion = None
+        
+        for start_idx in range(0, len(audio_data) - window_samples, step_samples):
+            end_idx = start_idx + window_samples
+            window_audio = audio_data[start_idx:end_idx]
+            timestamp = start_idx / sample_rate
             
-            # Simple F0 estimation
-            f0 = self._estimate_f0_simple(audio_data, sample_rate)
+            # Get ML emotion classification
+            emotion, confidence, all_probs = self.classify_emotion_ml(window_audio, sample_rate)
             
-            # Heuristic thresholds (from original implementation)
-            medium_energy_threshold = 0.15
-            medium_zero_crossing = 0.1
-            
-            # Basic emotion classification
-            if rms_energy > medium_energy_threshold * 1.33 and f0 > 200:
-                emotion = 'excited'
-                confidence = 0.6  # Lower confidence for heuristic
-            elif rms_energy > medium_energy_threshold and zero_crossing_rate > medium_zero_crossing * 1.2:
-                emotion = 'animated'
-                confidence = 0.55
-            elif rms_energy < medium_energy_threshold * 0.33:
-                emotion = 'calm'
-                confidence = 0.5
-            elif f0 > 250:
-                emotion = 'stressed'
-                confidence = 0.45
-            elif zero_crossing_rate > 0.15 * 1.33:
-                emotion = 'tense'
-                confidence = 0.4
-            else:
-                emotion = 'neutral'
-                confidence = 0.6
-            
-            # Create probability distribution (mock for compatibility)
-            all_probs = {
-                'excited': 0.1, 'animated': 0.1, 'calm': 0.1, 
-                'stressed': 0.1, 'tense': 0.1, 'neutral': 0.5
-            }
-            all_probs[emotion] = confidence
-            
-            return emotion, confidence, all_probs
-            
-        except Exception as e:
-            logger.debug(f"Fallback emotion classification failed: {e}")
-            return 'neutral', 0.5, {'neutral': 0.5}
+            # Only trigger event if emotion changes and confidence is high enough
+            if emotion != previous_emotion and confidence > self.confidence_threshold:
+                emotion_event = {
+                    "timestamp": timestamp,
+                    "emotion": emotion,
+                    "previous_emotion": previous_emotion,
+                    "confidence": confidence,
+                    "all_probabilities": all_probs,
+                    "analysis_type": "wav2vec2_emotion_detection",
+                    "model_name": self.model_name,
+                    "source": source_tag
+                }
+                emotion_events.append(emotion_event)
+                previous_emotion = emotion
+        
+        logger.info(f"Wav2Vec2 emotion analysis complete: {len(emotion_events)} emotion changes detected")
+        return emotion_events
     
-    def _estimate_f0_simple(self, audio_data: np.ndarray, sample_rate: int) -> float:
-        """Simple F0 estimation using autocorrelation"""
-        try:
-            autocorr = np.correlate(audio_data, audio_data, mode='full')
-            autocorr = autocorr[len(autocorr)//2:]
-            
-            min_period = int(sample_rate / 400)  # 400 Hz max
-            max_period = int(sample_rate / 50)   # 50 Hz min
-            
-            if max_period < len(autocorr):
-                peak_idx = np.argmax(autocorr[min_period:max_period]) + min_period
-                return sample_rate / peak_idx
-            return 0.0
-        except:
-            return 0.0
+    def _load_audio_file(self, audio_path: str) -> Tuple[np.ndarray, int]:
+        """Load audio file using soundfile - FAIL FAST, NO FALLBACKS"""
+        if not ML_MODELS_AVAILABLE:
+            raise Wav2Vec2TimelineError("ML models not available - soundfile not installed")
+        
+        # Use soundfile for audio loading
+        audio_data, sample_rate = sf.read(audio_path)
+        
+        # Convert to mono if stereo
+        if len(audio_data.shape) > 1:
+            audio_data = np.mean(audio_data, axis=1)
+        
+        return audio_data, sample_rate
+    
     
     def _save_enhanced_timeline(self, timeline, audio_path: str, source_tag: str):
         """Save enhanced timeline to audio_timelines directory"""
