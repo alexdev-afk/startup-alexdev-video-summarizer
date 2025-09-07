@@ -87,13 +87,21 @@ class AudioTimelineMergerService:
             self._merge_timeline_metadata_simple(combined_timeline, timelines)
             
             # DEMUCS BREAKTHROUGH: Just collect all events and sort chronologically
+            # FILTER: Only include Harmonic Shift and Tempo Change events to reduce noise
             all_events = []
             
             for timeline in timelines:
                 # Add only orphan events (events outside any span) - maintain data structure integrity
                 for event in timeline.events:
-                    all_events.append(event)
-                    logger.debug(f"Added orphan event from {timeline.sources_used}: {event.description} at {event.timestamp}s")
+                    # Only include key musical events that are relevant for institutional knowledge
+                    if ("Harmonic Shift" in event.description or "Tempo Change" in event.description):
+                        all_events.append(event)
+                        logger.debug(f"Added filtered event from {timeline.sources_used}: {event.description} at {event.timestamp}s")
+                    elif event.source == "whisper_voice":  # Always include transcription events
+                        all_events.append(event)
+                        logger.debug(f"Added transcription event from {timeline.sources_used}: {event.description} at {event.timestamp}s")
+                    else:
+                        logger.debug(f"Filtered out noisy event: {event.description} from {timeline.sources_used}")
                 
                 # NOTE: Do NOT extract events from spans - this corrupts data structure
                 # Each service maintains independent spans with their events nested inside

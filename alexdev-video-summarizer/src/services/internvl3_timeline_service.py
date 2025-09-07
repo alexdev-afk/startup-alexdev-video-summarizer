@@ -150,8 +150,8 @@ class InternVL3SceneAnalyzer:
         self.max_tokens = self.vlm_config.get('max_tokens', 256)
         self.image_size = getattr(model.config, 'force_image_size', 448) if model else 448
         
-        # Simple image description prompt - no timeline confusion
-        self.unified_prompt = """Describe what you see in this image. Include the people, setting, objects, and any visible text."""
+        # Simple image description prompt - flowing paragraph format
+        self.unified_prompt = """Describe what you see in this image in a single flowing paragraph. Include the people, their positioning and clothing, the setting, lighting, objects, and any visible text or branding. Write as one comprehensive paragraph without bullet points or sections."""
         
         # Context tracking for change detection
         self.scene_context_history = {}
@@ -522,12 +522,20 @@ class InternVL3TimelineService:
         self._validate_model_config()
         
         # Store prompt at service level for access in save methods
-        self.unified_prompt = "Describe what you see in this image. Include the people, setting, objects, and any visible text."
+        self.unified_prompt = "Describe what you see in this image in a single flowing paragraph. Include the people, their positioning and clothing, the setting, lighting, objects, and any visible text or branding. Write as one comprehensive paragraph without bullet points or sections."
         
         # VLM processing configuration
         self.confidence_threshold = self.vlm_config.get('confidence_threshold', 0.7)
         self.max_tokens = self.vlm_config.get('max_tokens', 256)
         self.frame_sample_rate = self.vlm_config.get('frame_sample_rate', 3)  # frames per scene
+        
+        # Contextual processing flag and setup - supports "both" mode
+        contextual_config = self.vlm_config.get('use_contextual_prompting', False)
+        self.use_contextual_prompting = contextual_config
+        self.both_mode = contextual_config == "both"
+        self.audio_context = None
+        self.previous_frame_descriptions = {}  # timestamp -> description mapping
+        self.previous_frame_images = {}  # timestamp -> PIL Image mapping for dual-image analysis
         
         # Initialize VLM components (lazy loading)
         self.model = None
@@ -654,14 +662,14 @@ class InternVL3TimelineService:
     
     def generate_and_save(self, video_path: str, scene_offsets_path: Optional[str] = None) -> EnhancedTimeline:
         """
-        Generate simplified timeline from video with VLM analysis - one event per frame
+        Generate simplified timeline from video with VLM analysis - supports both mode for comparison
         
         Args:
             video_path: Path to video.mp4 file (from FFmpeg)
             scene_offsets_path: Optional scene context (not used in simplified approach)
             
         Returns:
-            EnhancedTimeline with VLM events (no spans, no analysis file)
+            EnhancedTimeline with VLM events (last generated timeline for compatibility)
         """
         start_time = time.time()
         
@@ -673,32 +681,94 @@ class InternVL3TimelineService:
             video_metadata = self._get_video_metadata(video_path)
             total_duration = video_metadata.get('duration', 30.0)
             
-            # Create simple timeline with model info
-            timeline = EnhancedTimeline(
-                audio_file=str(video_path).replace('video.mp4', 'audio.wav'),
-                total_duration=total_duration
-            )
+            # Determine modes to run
+            if self.both_mode:
+                modes_to_run = [False, True]  # noncontextual first, then contextual
+                logger.info("BOTH MODE: Generating both noncontextual and contextual timelines for comparison")
+            else:
+                # Single mode (maintain backward compatibility)
+                modes_to_run = [bool(self.use_contextual_prompting)]
+                
+            last_timeline = None
             
-            # Add model and prompt information from config
-            timeline.sources_used.append(self.service_name)
-            timeline.processing_notes.append(f"Model: {self.get_model_name('short')}")
-            timeline.processing_notes.append(f"Prompt: {self.unified_prompt}")
-            timeline.processing_notes.append(f"Processing timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
-            
-            # Process video frames directly - no complex scene processing
-            self._process_video_frames_simple(video_path, timeline, total_duration)
+            # Process each mode
+            for is_contextual in modes_to_run:
+                mode_name = "contextual" if is_contextual else "noncontextual"
+                logger.info(f"Processing {mode_name} mode...")
+                
+                # Temporarily set contextual mode for this iteration
+                original_contextual = self.use_contextual_prompting
+                self.use_contextual_prompting = is_contextual
+                
+                # Reset previous frame context for each mode
+                self.previous_frame_descriptions = {}
+                self.previous_frame_images = {}
+                self.audio_context = None
+                
+                # Create timeline for this mode
+                timeline = EnhancedTimeline(
+                    audio_file=str(video_path).replace('video.mp4', 'audio.wav'),
+                    total_duration=total_duration
+                )
+                
+                # Add model and prompt information from config
+                timeline.sources_used.append(self.service_name)
+                timeline.processing_notes.append(f"Model: {self.get_model_name('short')}")
+                timeline.processing_notes.append(f"Mode: {mode_name}")
+                timeline.processing_notes.append(f"Prompt: {self.unified_prompt if not is_contextual else 'Contextual prompting with audio context'}")
+                timeline.processing_notes.append(f"Processing timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+                
+                # Process video frames for this mode
+                self._process_video_frames_simple(video_path, timeline, total_duration)
+                
+                # Save timeline file for this mode
+                self._save_timeline(timeline, video_path)
+                
+                last_timeline = timeline
+                
+                # Restore original contextual setting
+                self.use_contextual_prompting = original_contextual
+                
+                logger.info(f"{mode_name.capitalize()} timeline: {len(timeline.events)} events generated")
             
             processing_time = time.time() - start_time
-            logger.info(f"InternVL3 simple timeline: {len(timeline.events)} events in {processing_time:.2f}s")
+            logger.info(f"InternVL3 timeline generation complete: {processing_time:.2f}s")
             
-            # Save only the timeline file - no analysis file needed
-            self._save_timeline(timeline, video_path)
-            
-            return timeline
+            return last_timeline
             
         except Exception as e:
             logger.error(f"InternVL3 timeline generation failed: {e}")
             return self._create_fallback_timeline(video_path, error=str(e))
+    
+    def _load_audio_context_if_needed(self, video_name: str):
+        """Load audio context file for contextual prompting"""
+        if not self.use_contextual_prompting:
+            return
+            
+        audio_context_path = Path("build") / video_name / "audio_context.txt"
+        if audio_context_path.exists():
+            with open(audio_context_path, 'r', encoding='utf-8') as f:
+                self.audio_context = f.read()
+            logger.info(f"Loaded audio context for contextual prompting: {len(self.audio_context)} chars")
+        else:
+            logger.warning(f"Audio context file not found: {audio_context_path} - using non-contextual mode")
+            self.use_contextual_prompting = False
+
+    def _create_contextual_prompt(self, timestamp: float, previous_timestamp: float = None, is_dual_image: bool = False) -> str:
+        """Create contextual prompt with audio context only - no dual-image processing to avoid hallucinations"""
+        if not self.use_contextual_prompting or not self.audio_context:
+            return self.unified_prompt
+            
+        # Same prompt for all frames - single image with audio context
+        prompt = f"""<image>
+Analyze this video frame at timestamp {timestamp:.2f}s.
+
+Audio context (full timeline):
+{self.audio_context}
+
+Describe what you see in a single flowing paragraph. Include the people, their positioning, clothing, the setting, lighting, objects, and any visible text or branding. Write as one comprehensive paragraph without bullet points or sections."""
+        
+        return prompt
     
     def _process_video_frames_simple(self, video_path: str, timeline: EnhancedTimeline, total_duration: float):
         """
@@ -718,6 +788,9 @@ class InternVL3TimelineService:
                     video_name = video_path_obj.stem
             else:
                 video_name = video_path_obj.stem
+            
+            # Load audio context for contextual prompting if enabled
+            self._load_audio_context_if_needed(video_name)
             
             # Load frame metadata from PySceneDetect  
             frame_metadata_path = Path("build") / video_name / "frames" / "frame_metadata.json"
@@ -796,14 +869,30 @@ class InternVL3TimelineService:
     
     def _analyze_frame_with_vlm(self, image: Image.Image, timestamp: float) -> str:
         """
-        Analyze representative frame with VLM using proven single-image description prompt
+        Analyze representative frame with VLM using contextual dual-image or standard prompting
         Returns semantic description for institutional knowledge extraction
         """
         try:
             if self.scene_analyzer:
-                # Use the proven single-image description prompt
-                description_prompt = "Describe what you see in this image. Include the people, setting, objects, and any visible text."
+                # Check for previous frame for dual-image contextual analysis
+                previous_image = None
+                previous_timestamp = None
+                
+                if self.use_contextual_prompting and self.previous_frame_images:
+                    # Find the most recent previous frame
+                    previous_timestamps = [ts for ts in self.previous_frame_images.keys() if ts < timestamp]
+                    if previous_timestamps:
+                        previous_timestamp = max(previous_timestamps)
+                        previous_image = self.previous_frame_images[previous_timestamp]
+                
+                # Always use single-image analysis for contextual mode to avoid hallucinations
+                description_prompt = self._create_contextual_prompt(timestamp)
                 description = self.scene_analyzer._query_vlm(image, description_prompt)
+                
+                # Store this description for reference (not used in current implementation)
+                if self.use_contextual_prompting:
+                    self.previous_frame_descriptions[timestamp] = description
+                
                 return description
             
             return f"Scene at {timestamp:.1f}s - VLM analysis unavailable"
@@ -887,14 +976,16 @@ class InternVL3TimelineService:
         clean_model_name = self.get_model_name('clean')
         timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M')
         
-        timeline_file = timeline_dir / f'video_timeline.json'
+        # Add contextual/noncontextual suffix based on processing mode
+        context_suffix = "_contextual" if self.use_contextual_prompting else "_noncontextual"
+        timeline_file = timeline_dir / f'video_timeline{context_suffix}.json'
         
         try:
             # Convert timeline to dictionary format
             timeline_dict = timeline.to_dict()
             
             # Add model and prompt information at the top
-            prompt_used = getattr(self, 'unified_prompt', 'Describe what you see in this image. Include the people, setting, objects, and any visible text.')
+            prompt_used = getattr(self, 'unified_prompt', 'Describe what you see in this image in a single flowing paragraph. Include the people, their positioning and clothing, the setting, lighting, objects, and any visible text or branding. Write as one comprehensive paragraph without bullet points or sections.')
             model_name = self.get_model_name('full')
             model_path = self.vlm_config.get('model_path', model_name)
             

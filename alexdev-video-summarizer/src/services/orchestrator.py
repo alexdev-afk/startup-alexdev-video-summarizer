@@ -18,6 +18,7 @@ from services.scene_detection_service import SceneDetectionService
 from services.demucs_service import DemucsService
 from services.demucs_audio_coordinator import DemucsAudioCoordinatorService
 from services.internvl3_timeline_service import InternVL3TimelineService
+from services.vid2seq_timeline_service import Vid2SeqTimelineService
 from services.knowledge_generator import KnowledgeGenerator
 from utils.processing_context import VideoProcessingContext
 from utils.circuit_breaker import CircuitBreaker
@@ -49,8 +50,9 @@ class VideoProcessingOrchestrator:
         self.demucs_service = DemucsService(config)
         self.audio_coordinator = DemucsAudioCoordinatorService(config)
         
-        # Current video processing service
+        # Video processing services
         self.video_service = InternVL3TimelineService(config)
+        self.vid2seq_service = Vid2SeqTimelineService(config)
         
         self.knowledge_generator = KnowledgeGenerator(config)
         
@@ -144,7 +146,7 @@ class VideoProcessingOrchestrator:
                 'frames_extracted': frame_count
             })
             
-            # Step 5: InternVL3 Frame-Based Video Processing
+            # Step 5A: InternVL3 Frame-Based Video Processing
             progress_callback('video_processing', {
                 'stage': 'starting', 
                 'processing_mode': 'internvl3_frames'
@@ -154,7 +156,7 @@ class VideoProcessingOrchestrator:
             video_timeline = self.video_service.generate_and_save(str(context.processed_video_path), None)
             
             progress_callback('video_processing', {
-                'stage': 'completed',
+                'stage': 'internvl3_completed',
                 'events_generated': len(video_timeline.events) if video_timeline else 0,
                 'total_duration': video_timeline.total_duration if video_timeline else 0
             })
@@ -162,6 +164,25 @@ class VideoProcessingOrchestrator:
             # Cleanup video service to free VRAM
             if hasattr(self.video_service, 'cleanup'):
                 self.video_service.cleanup()
+                
+            # Step 5B: Vid2Seq Dense Video Captioning
+            progress_callback('video_processing', {
+                'stage': 'vid2seq_starting',
+                'processing_mode': 'vid2seq_dense_captioning'
+            })
+            
+            # Process video with Vid2Seq for dense captioning
+            vid2seq_timeline = self.vid2seq_service.generate_and_save(str(context.processed_video_path), None)
+            
+            progress_callback('video_processing', {
+                'stage': 'completed',
+                'vid2seq_events_generated': len(vid2seq_timeline.events) if vid2seq_timeline else 0,
+                'internvl3_events_generated': len(video_timeline.events) if video_timeline else 0
+            })
+            
+            # Cleanup Vid2Seq service to free VRAM
+            if hasattr(self.vid2seq_service, 'cleanup'):
+                self.vid2seq_service.cleanup()
             
             # Store video analysis results in context
             if video_timeline:
@@ -181,20 +202,64 @@ class VideoProcessingOrchestrator:
             audio_timeline_path = context.build_directory / "audio_timelines" / "combined_audio_timeline.json"
             video_timeline_path = context.build_directory / "video_timelines" 
             
-            # Find the most recent video timeline file
-            video_timeline_files = list(video_timeline_path.glob("*_timeline.json"))
-            if video_timeline_files:
-                latest_video_timeline = max(video_timeline_files, key=lambda f: f.stat().st_mtime)
-                output_path = Path("output") / f"{context.video_name}_knowledge.md"
+            # Look for contextual, noncontextual, and vid2seq video timeline files
+            contextual_files = list(video_timeline_path.glob("*_contextual.json"))
+            noncontextual_files = list(video_timeline_path.glob("*_noncontextual.json"))
+            vid2seq_files = list(video_timeline_path.glob("vid2seq_timeline.json"))
+            
+            knowledge_file = None
+            
+            # Process contextual version if available
+            if contextual_files:
+                latest_contextual = max(contextual_files, key=lambda f: f.stat().st_mtime)
+                output_path = Path("output") / f"{context.video_name}_knowledge_contextualvlm.md"
                 output_path.parent.mkdir(exist_ok=True)
                 
                 self.knowledge_generator.generate_timeline_from_files(
-                    audio_timeline_path, latest_video_timeline, context.video_name, output_path
+                    audio_timeline_path, latest_contextual, context.video_name, output_path
                 )
                 knowledge_file = output_path
-            else:
-                logger.warning("No video timeline found for knowledge generation")
-                knowledge_file = None
+                logger.info(f"Generated contextual knowledge: {output_path}")
+            
+            # Process noncontextual version if available  
+            if noncontextual_files:
+                latest_noncontextual = max(noncontextual_files, key=lambda f: f.stat().st_mtime)
+                output_path = Path("output") / f"{context.video_name}_knowledge_noncontextualvlm.md"
+                output_path.parent.mkdir(exist_ok=True)
+                
+                self.knowledge_generator.generate_timeline_from_files(
+                    audio_timeline_path, latest_noncontextual, context.video_name, output_path
+                )
+                knowledge_file = output_path  # Keep most recent as primary
+                logger.info(f"Generated noncontextual knowledge: {output_path}")
+            
+            # Process vid2seq version if available
+            if vid2seq_files:
+                latest_vid2seq = max(vid2seq_files, key=lambda f: f.stat().st_mtime)
+                output_path = Path("output") / f"{context.video_name}_knowledge_vid2seq.md"
+                output_path.parent.mkdir(exist_ok=True)
+                
+                self.knowledge_generator.generate_timeline_from_files(
+                    audio_timeline_path, latest_vid2seq, context.video_name, output_path
+                )
+                knowledge_file = output_path  # Keep most recent as primary
+                logger.info(f"Generated vid2seq knowledge: {output_path}")
+            
+            # Fallback to legacy timeline files if no modern files found
+            if not contextual_files and not noncontextual_files and not vid2seq_files:
+                legacy_timeline_files = list(video_timeline_path.glob("video_timeline.json"))
+                if legacy_timeline_files:
+                    latest_timeline = max(legacy_timeline_files, key=lambda f: f.stat().st_mtime)
+                    output_path = Path("output") / f"{context.video_name}_knowledge.md"
+                    output_path.parent.mkdir(exist_ok=True)
+                    
+                    self.knowledge_generator.generate_timeline_from_files(
+                        audio_timeline_path, latest_timeline, context.video_name, output_path
+                    )
+                    knowledge_file = output_path
+                    logger.info(f"Generated legacy knowledge: {output_path}")
+                else:
+                    logger.warning("No video timeline found for knowledge generation")
                 
             progress_callback('knowledge_generation', {'stage': 'completed', 'file': knowledge_file})
             

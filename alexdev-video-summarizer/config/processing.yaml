@@ -91,6 +91,7 @@ gpu_pipeline:
     confidence_threshold: 0.7
     max_tokens: 512
     frame_sample_rate: 3
+    use_contextual_prompting: false   # Options: false (noncontextual), true (contextual), "both" (generate both for comparison)
     
     # Generation Configuration - Controls inference behavior
     generation_config:
@@ -113,7 +114,19 @@ gpu_pipeline:
     
     # Production-ready VLM processing only
   
+  # Vid2Seq Settings (Dense Video Captioning)
+  vid2seq:
+    model_path: "../references/vidchapters"      # Path to VidChapters model
+    checkpoint_path: null                        # Optional checkpoint path
+    device: "cuda"
+    confidence_threshold: 0.5
+    max_duration: 600                           # 10 minutes max processing
     
+    # Dense captioning configuration
+    enable_dense_captioning: true               # Enable Vid2Seq processing
+    temporal_localization: true                 # Temporal event localization
+    speech_visual_fusion: true                  # Combine speech + visual
+  
   # Whisper Settings (Hybrid: Original Whisper GPU + WhisperX features)
   whisper:
     model_size: "large-v2"      # large-v2 for best accuracy
