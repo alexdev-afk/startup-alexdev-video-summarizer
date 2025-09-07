@@ -391,9 +391,7 @@ class WhisperService:
         audio_path = Path(audio_path) if isinstance(audio_path, str) else audio_path
         logger.info(f"Starting sequential transcription: {audio_path.name}")
         
-        # Handle development mock mode
-        if self.development_config.get('mock_ai_services', False):
-            return self._mock_transcription(audio_path, scene_info)
+        # No mock modes - Whisper must work properly or fail
         
         # Validate input
         if not audio_path.exists():
@@ -1253,51 +1251,6 @@ class WhisperService:
         
         return merged
     
-    def _mock_transcription(self, audio_path: Path, scene_info: Optional[Dict]) -> Dict[str, Any]:
-        """Mock transcription for development/testing"""
-        logger.debug(f"Mock Whisper transcription: {audio_path.name}")
-        
-        # Simulate processing time
-        time.sleep(0.5 if self.development_config.get('fast_mode', False) else 1.0)
-        
-        # Generate mock content based on filename or scene
-        video_name = audio_path.parent.name
-        scene_id = scene_info.get('scene_id', 1) if scene_info else 1
-        
-        mock_transcript = (
-            f"This is a mock transcription for {video_name}, scene {scene_id}. "
-            f"The speaker discusses various topics related to the video content. "
-            f"Key points include project updates, technical details, and strategic planning. "
-            f"Multiple speakers may be present in this {scene_info.get('duration', 60) if scene_info else 60:.1f} second segment."
-        )
-        
-        mock_result = {
-            'transcript': mock_transcript,
-            'language': 'en',
-            'language_probability': 0.95,
-            'segments': [
-                {
-                    'start': scene_info.get('start_seconds', 0) if scene_info else 0,
-                    'end': scene_info.get('end_seconds', 60) if scene_info else 60,
-                    'text': mock_transcript,
-                    'speaker': 'Speaker_1',
-                    'confidence': 0.92,
-                    'words': []
-                }
-            ],
-            'speakers': ['Speaker_1', 'Speaker_2'] if scene_id % 2 == 0 else ['Speaker_1'],
-            'processing_time': 0.5,
-            'model_info': {
-                'model_size': 'mock',
-                'device': 'mock'
-            },
-            'scene_context': scene_info,
-            'mock_mode': True
-        }
-        
-        # Skip saving duplicate transcription file - enhanced service handles analysis
-        
-        return mock_result
     
     def _cleanup_gpu_memory(self):
         """Cleanup GPU memory after processing"""
@@ -1340,7 +1293,7 @@ class WhisperService:
             'diarization_available': self.diarize_model is not None,
             'vad_threshold': self.vad_threshold,
             'chunk_threshold': self.chunk_threshold,
-            'development_mode': self.development_config.get('mock_ai_services', False),
+            'development_mode': False,
             'enhancement_features': {
                 'vad_segmentation': True,
                 'hallucination_filtering': True,

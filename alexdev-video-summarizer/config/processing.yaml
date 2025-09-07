@@ -88,8 +88,7 @@ gpu_pipeline:
     max_input_tiles: 6                # Maximum image tiles for dynamic preprocessing
     use_thumbnail: false              # Use thumbnail in multi-tile processing
     
-    # Development settings
-    mock_responses: false             # Use real VLM (set true for development)
+    # Production-ready VLM processing only
   
     
   # Whisper Settings (Hybrid: Original Whisper GPU + WhisperX features)
@@ -275,7 +274,6 @@ audio_optimization:
 
 # Development Settings (for testing)
 development:
-  mock_ai_services: false      # PRODUCTION: Use real InternVL3 model
   skip_model_loading: false    # PRODUCTION: Load all AI models for real processing
   skip_ffmpeg_check: false     # FFmpeg is now installed and ready
   fast_mode: false             # PRODUCTION: Full quality processing

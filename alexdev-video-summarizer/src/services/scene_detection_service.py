@@ -49,17 +49,10 @@ class SceneDetectionService:
         self.fallback_to_time_based = self.scene_config.get('fallback_to_time_based', True)
         self.time_based_scene_length = self.scene_config.get('time_based_scene_length', 120)
         
-        # Check if we're in development mock mode
-        dev_config = config.get('development', {})
-        self.mock_mode = dev_config.get('mock_ai_services', False)
-        
-        if not SCENEDETECT_AVAILABLE and not self.mock_mode:
+        if not SCENEDETECT_AVAILABLE:
             raise SceneDetectionError("PySceneDetect not available. Install with: pip install scenedetect>=0.6.2")
         
-        if self.mock_mode:
-            logger.info("Scene detection service initialized (MOCK MODE)")
-        else:
-            logger.info(f"Scene detection service initialized - threshold: {self.threshold}")
+        logger.info(f"Scene detection service initialized - threshold: {self.threshold}")
     
     def analyze_video_scenes(self, video_path: Path) -> Dict[str, Any]:
         """
@@ -71,8 +64,7 @@ class SceneDetectionService:
         Returns:
             Scene analysis data structure with boundaries and representative frames
         """
-        if self.mock_mode:
-            return self._mock_scene_analysis(video_path)
+        # Scene detection requires real PySceneDetect - no mock modes
         
         try:
             logger.info(f"Analyzing scenes for: {video_path.name}")
@@ -101,7 +93,7 @@ class SceneDetectionService:
                 'scene_files': [],  # Will be populated by FFmpeg coordination
                 'fps': fps,
                 'total_duration': total_duration,
-                'mock_mode': False
+                'production_mode': True
             }
             
             logger.info(f"Scene analysis complete: {len(boundaries)} scenes detected")
@@ -261,75 +253,10 @@ class SceneDetectionService:
             'scene_files': [],
             'fps': fps,
             'total_duration': total_duration,
-            'mock_mode': False,
+            'production_mode': True,
             'fallback_mode': True
         }
     
-    def _mock_scene_analysis(self, video_path: Path) -> Dict[str, Any]:
-        """
-        Mock scene analysis for development/testing
-        
-        Args:
-            video_path: Path to video file
-            
-        Returns:
-            Mock scene data
-        """
-        logger.info(f"Analyzing scenes for: {video_path.name} (MOCK)")
-        
-        # Simulate processing time
-        time.sleep(1)
-        
-        mock_scenes = [
-            {
-                'scene_id': 1,
-                'start_seconds': 0.0,
-                'end_seconds': 120.0,
-                'duration': 120.0,
-                'start_frame': 0,
-                'end_frame': 3600
-            },
-            {
-                'scene_id': 2,
-                'start_seconds': 120.0,
-                'end_seconds': 240.0,
-                'duration': 120.0,
-                'start_frame': 3600,
-                'end_frame': 7200
-            },
-            {
-                'scene_id': 3,
-                'start_seconds': 240.0,
-                'end_seconds': 360.0,
-                'duration': 120.0,
-                'start_frame': 7200,
-                'end_frame': 10800
-            }
-        ]
-        
-        representative_frames = [
-            {
-                'scene_id': scene['scene_id'],
-                'representative_frame': int((scene['start_frame'] + scene['end_frame']) / 2),
-                'frame_timestamp': (scene['start_seconds'] + scene['end_seconds']) / 2,
-                'scene_context': scene
-            }
-            for scene in mock_scenes
-        ]
-        
-        scene_data = {
-            'scene_count': len(mock_scenes),
-            'scenes': mock_scenes,
-            'boundaries': mock_scenes,
-            'representative_frames': representative_frames,
-            'scene_files': [],
-            'fps': 30.0,
-            'total_duration': 360.0,
-            'mock_mode': True
-        }
-        
-        logger.info(f"Scene analysis complete: {len(mock_scenes)} scenes detected (MOCK)")
-        return scene_data
     
     def coordinate_frame_extraction(self, video_path: Path, boundaries: List[Dict], ffmpeg_service=None) -> Dict[str, Any]:
         """
@@ -343,8 +270,7 @@ class SceneDetectionService:
         Returns:
             Dictionary containing frame extraction metadata and paths
         """
-        if self.mock_mode:
-            return self._mock_frame_extraction(video_path, boundaries)
+        # Real frame extraction only - no mock modes
         
         if not ffmpeg_service:
             logger.warning("No FFmpeg service provided, cannot extract frames")
@@ -362,67 +288,4 @@ class SceneDetectionService:
             logger.error(f"Frame extraction failed: {str(e)}")
             return {}
     
-    def _mock_frame_extraction(self, video_path: Path, boundaries: List[Dict]) -> Dict[str, Any]:
-        """Mock frame extraction for development"""
-        logger.info(f"Mocking frame extraction: 3 frames × {len(boundaries)} scenes")
-        
-        frames_dir = video_path.parent / "frames"
-        
-        frame_data = {
-            "video_file": str(video_path.name),
-            "total_scenes": len(boundaries),
-            "created_at": time.time(),
-            "extraction_method": "3_frames_per_scene",
-            "mock_mode": True,
-            "scenes": {}
-        }
-        
-        for boundary in boundaries:
-            scene_id = boundary['scene_id']
-            start_seconds = boundary['start_seconds']
-            end_seconds = boundary.get('end_seconds', start_seconds + 5.0)
-            duration = end_seconds - start_seconds
-            representative_timestamp = start_seconds + (duration / 2)
-            
-            scene_frames = {
-                "scene_id": scene_id,
-                "start_seconds": start_seconds,
-                "end_seconds": end_seconds,
-                "duration_seconds": duration,
-                "frames": {
-                    "first": {
-                        "timestamp": start_seconds,
-                        "path": str(frames_dir / f"scene_{scene_id:03d}_first.jpg"),
-                        "type": "scene_start",
-                        "mock": True
-                    },
-                    "representative": {
-                        "timestamp": representative_timestamp,
-                        "path": str(frames_dir / f"scene_{scene_id:03d}_representative.jpg"),
-                        "type": "scene_middle",
-                        "mock": True
-                    },
-                    "last": {
-                        "timestamp": end_seconds - 0.1,
-                        "path": str(frames_dir / f"scene_{scene_id:03d}_last.jpg"),
-                        "type": "scene_end",
-                        "mock": True
-                    }
-                }
-            }
-            frame_data["scenes"][f"scene_{scene_id:03d}"] = scene_frames
-        
-        return frame_data
     
-    def _mock_scene_files(self, video_path: Path, boundaries: List[Dict]) -> List[Path]:
-        """Mock scene file paths for development (legacy method)"""
-        logger.info(f"Mocking scene file creation: {len(boundaries)} scenes")
-        
-        scenes_dir = video_path.parent / "scenes"
-        mock_scene_files = []
-        
-        for boundary in boundaries:
-            scene_file = scenes_dir / f"scene_{boundary['scene_id']:03d}.mp4"
-            mock_scene_files.append(scene_file)
-        
-        return mock_scene_files

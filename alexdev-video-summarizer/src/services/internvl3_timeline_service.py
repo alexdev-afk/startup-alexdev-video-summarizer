@@ -203,14 +203,9 @@ class InternVL3SceneAnalyzer:
             VLM response as string
         """
         try:
-            # Check if this is development/mock mode
-            if self.config.get('development', {}).get('mock_ai_services', False):
-                return self._generate_mock_vlm_response(prompt)
-            
             # Check if real model is loaded
             if not hasattr(self, 'model') or self.model is None:
-                logger.warning("InternVL3 model not loaded, using mock response")
-                return self._generate_mock_vlm_response(prompt)
+                raise InternVL3TimelineError("InternVL3 model not loaded - cannot perform VLM inference")
             
             logger.info(f"Starting VLM inference with prompt: {prompt[:50]}...")
             
@@ -292,9 +287,6 @@ class InternVL3SceneAnalyzer:
             logger.error(f"Traceback: {traceback.format_exc()}")
             return f"VLM analysis unavailable: {str(e)}"
     
-    def _generate_mock_vlm_response(self, prompt: str) -> str:
-        """Generate realistic mock VLM responses for development"""
-        return """Professional salon setting with two women in consultation. The client (left) and stylist (right) are engaged in discussion about hair services. Modern salon interior with mirrors, professional lighting, and clean aesthetic. Visible text includes "Bonita" branding and salon service information. The atmosphere is welcoming and professional."""
     
     def _estimate_analysis_confidence(self, analysis_text: str) -> float:
         """
@@ -420,11 +412,7 @@ class InternVL3TimelineService:
     def _initialize_vlm(self):
         """Initialize InternVL3 model and processor"""
         try:
-            # Check if in development/mock mode
-            if self.config.get('development', {}).get('mock_ai_services', False):
-                logger.info("InternVL3 running in mock mode for development")
-                self.scene_analyzer = InternVL3SceneAnalyzer(None, None, self.config)
-                return
+            # InternVL3 requires proper model loading - no fallback modes
             
             # Load model from config (allows rapid model testing)
             model_path = self.vlm_config.get('model_path')
@@ -470,18 +458,15 @@ class InternVL3TimelineService:
                 logger.info(f"{model_name} model loaded successfully")
                 
             except ImportError as e:
-                logger.warning(f"InternVL3 dependencies not available: {e}")
-                logger.info("Falling back to mock mode - install transformers and torch")
-                self.scene_analyzer = InternVL3SceneAnalyzer(None, None, self.config)
+                logger.error(f"InternVL3 dependencies not available: {e}")
+                raise InternVL3TimelineError(f"InternVL3 dependencies missing: {str(e)}") from e
             except Exception as e:
                 logger.error(f"Failed to load InternVL3 model: {e}")
-                logger.info("Falling back to mock mode")
-                self.scene_analyzer = InternVL3SceneAnalyzer(None, None, self.config)
+                raise InternVL3TimelineError(f"Failed to load InternVL3 model: {str(e)}") from e
             
         except Exception as e:
             logger.error(f"Failed to initialize InternVL3: {e}")
-            logger.info("Falling back to mock mode")
-            self.scene_analyzer = InternVL3SceneAnalyzer(None, None, self.config)
+            raise InternVL3TimelineError(f"Failed to initialize InternVL3: {str(e)}") from e
     
     def generate_and_save(self, video_path: str, scene_offsets_path: Optional[str] = None) -> EnhancedTimeline:
         """

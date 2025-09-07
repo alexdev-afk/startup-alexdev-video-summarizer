@@ -209,7 +209,7 @@ logging:
 
 # Development Settings (for testing)
 development:
-  mock_ai_services: false      # PRODUCTION: Enable real AI services
+  # PRODUCTION: Only real AI services available
   skip_model_loading: false    # PRODUCTION: Load all AI models for real processing
   skip_ffmpeg_check: false     # FFmpeg is now installed and ready
   fast_mode: false             # PRODUCTION: Full quality processing
