@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/n8n_shared/dev/startup-alexdev-video-summarizer/alexdev-template/**)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
