@@ -15,9 +15,9 @@ from datetime import datetime
 
 # Optional imports for development mode
 try:
-    from pyAudioAnalysis import audioTrainTest as aT
-    from pyAudioAnalysis import audioSegmentation as aS
-    from pyAudioAnalysis import ShortTermFeatures as aF  # Correct module name
+    # Only import ShortTermFeatures - the only module actually used
+    # audioTrainTest and audioSegmentation require imblearn which may not be installed
+    from pyAudioAnalysis import ShortTermFeatures as aF
     PYAUDIOANALYSIS_FULL = True
 except (ImportError, ValueError, Exception):
     PYAUDIOANALYSIS_FULL = False

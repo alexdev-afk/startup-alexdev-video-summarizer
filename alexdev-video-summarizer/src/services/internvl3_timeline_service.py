@@ -130,6 +130,9 @@ class InternVL3TimelineServiceError(Exception):
     """InternVL3 timeline service error"""
     pass
 
+# Alias for backward compatibility
+InternVL3TimelineError = InternVL3TimelineServiceError
+
 
 class InternVL3SceneAnalyzer:
     """Comprehensive scene analysis using VLM for rich contextual understanding"""

@@ -162,22 +162,38 @@ class FFmpegService:
     def _extract_video_stream(self, video_path: Path, video_out_path: Path):
         """Extract video stream with standardized settings"""
         video_config = self.ffmpeg_config.get('video', {})
-        
+
+        # Get video info to check resolution
+        video_info = self.get_video_info(video_path)
+        width = video_info.get('width', 0)
+        height = video_info.get('height', 0)
+
+        # Check if video needs downscaling (limit to 1080p to prevent memory issues)
+        max_dimension = video_config.get('max_dimension', 1920)
+        needs_downscale = width > max_dimension or height > max_dimension
+
         cmd = [
             self.ffmpeg_path, '-y',  # Overwrite output
             '-i', str(video_path),
             '-an',  # No audio
             '-vcodec', video_config.get('codec', 'libx264'),
         ]
-        
+
         # Add quality settings
         if video_config.get('quality') == 'high':
             cmd.extend(['-crf', '18'])
-        
-        # Preserve resolution and framerate by default
-        if video_config.get('preserve_resolution', True):
+
+        # Handle resolution - downscale if too large to prevent x264 memory issues
+        if needs_downscale:
+            # Scale to max_dimension while maintaining aspect ratio
+            if width > height:
+                cmd.extend(['-vf', f'scale={max_dimension}:-2'])
+            else:
+                cmd.extend(['-vf', f'scale=-2:{max_dimension}'])
+            logger.info(f"Downscaling video from {width}x{height} to max dimension {max_dimension}")
+        elif video_config.get('preserve_resolution', True):
             cmd.extend(['-vf', 'scale=-2:-2'])  # Ensure even dimensions
-            
+
         cmd.append(str(video_out_path))
         
         logger.debug(f"Video extraction command: {' '.join(cmd)}")
