@@ -187,11 +187,13 @@ class VideoProcessingOrchestrator:
                 )
             context.scene_data.update(frame_extraction_result)
             frame_count = frame_extraction_result.get('total_frames_extracted', 0)
+            if frame_count == 0:
+                raise Exception(f"Frame extraction produced 0 frames for {video_path.name}")
             progress_callback('frame_extraction', {
                 'stage': 'completed',
                 'frames_extracted': frame_count
             })
-            
+
             # Step 5A: InternVL3 Frame-Based Video Processing
             progress_callback('video_processing', {
                 'stage': 'starting', 

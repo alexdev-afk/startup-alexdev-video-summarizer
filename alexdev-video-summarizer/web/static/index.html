@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Video Summarizer</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<header>
+  <h1>Video Summarizer</h1>
+  <div class="worker-status">
+    <div class="dot" id="worker-dot"></div>
+    <span id="worker-label">Idle</span>
+  </div>
+</header>
+
+<nav class="tabs">
+  <div class="tab active" data-tab="browser">File Browser</div>
+  <div class="tab" data-tab="queue">Queue</div>
+  <div class="tab" data-tab="detail">Batch Detail</div>
+  <div class="tab" data-tab="history">History</div>
+</nav>
+
+<!-- ── File Browser ──────────────────────────────────────────── -->
+<div class="screen active" id="screen-browser">
+  <div class="path-bar">
+    <input type="text" id="browse-path" placeholder="Enter directory path...">
+    <button class="btn btn-secondary" id="btn-up">&#8593; Up</button>
+    <button class="btn btn-primary" id="btn-browse">Browse</button>
+  </div>
+  <div class="selection-bar">
+    <span class="count" id="selection-count">0 videos selected</span>
+    <button class="btn btn-primary" id="btn-create-batch" disabled>Create Batch</button>
+  </div>
+  <div class="file-list" id="file-list"></div>
+</div>
+
+<!-- ── Queue ──────────────────────────────────────────────────── -->
+<div class="screen" id="screen-queue">
+  <div id="queue-list"></div>
+</div>
+
+<!-- ── Batch Detail ───────────────────────────────────────────── -->
+<div class="screen" id="screen-detail">
+  <div class="detail-header">
+    <button class="back-btn" id="btn-back-queue">&#8592;</button>
+    <h2 id="detail-title">Batch</h2>
+    <span class="badge" id="detail-badge"></span>
+    <div style="margin-left:auto;display:flex;gap:8px">
+      <button class="btn btn-success btn-sm" id="detail-start">Start</button>
+      <button class="btn btn-secondary btn-sm" id="detail-pause">Pause</button>
+      <button class="btn btn-secondary btn-sm" id="detail-retry">Retry Failed</button>
+    </div>
+  </div>
+  <table class="video-table">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Filename</th>
+        <th>Size</th>
+        <th>Pipeline</th>
+        <th>Status</th>
+        <th>Time</th>
+      </tr>
+    </thead>
+    <tbody id="detail-tbody"></tbody>
+  </table>
+</div>
+
+<!-- ── History ─────────────────────────────────────────────────── -->
+<div class="screen" id="screen-history">
+  <div id="history-list"></div>
+</div>
+
+<div class="toast-container" id="toast-container"></div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,8 +1,9 @@
 # Phase 1: CLI Framework and Mock Services (Essential only)
 # CLI & Configuration - ACTIVE
-click>=8.1.0                # CLI framework  
+click>=8.1.0                # CLI framework
 pyyaml>=6.0                 # YAML configuration
 rich>=13.0.0                # Enhanced CLI output
+flask>=3.0.0                # Web UI server
 
 # Core Dependencies - FOR PHASE 2+
 # torch>=2.0.0
