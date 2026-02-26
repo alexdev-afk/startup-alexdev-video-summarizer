@@ -13,17 +13,8 @@ import contextlib
 from pathlib import Path
 from io import StringIO
 
-# Fix Windows console encoding for Unicode support
-if sys.platform.startswith('win'):
-    try:
-        # Set console to UTF-8 mode
-        os.system('chcp 65001 > nul 2>&1')
-        import codecs
-        sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer, 'replace')
-        sys.stderr = codecs.getwriter('utf-8')(sys.stderr.buffer, 'replace')
-    except Exception:
-        # Fallback if encoding fix fails
-        pass
+# Force UTF-8 mode on Windows (fixes charmap encoding errors with Unicode filenames)
+os.environ.setdefault('PYTHONUTF8', '1')
 
 # Add src to Python path for imports
 sys.path.insert(0, str(Path(__file__).parent))

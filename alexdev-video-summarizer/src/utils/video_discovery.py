@@ -49,10 +49,12 @@ class VideoDiscovery:
         
         videos = []
         
-        # Search input directory (non-recursive for now)
-        for file_path in self.input_dir.iterdir():
-            logger.debug(f"Checking file: {file_path.name}, is_file: {file_path.is_file()}, extension: {file_path.suffix}")
-            if file_path.is_file() and self._is_supported_video(file_path):
+        # Search input directory recursively
+        for file_path in self.input_dir.rglob('*'):
+            if not file_path.is_file():
+                continue
+            logger.debug(f"Checking file: {file_path.name}, extension: {file_path.suffix}")
+            if self._is_supported_video(file_path):
                 logger.debug(f"File {file_path.name} has supported extension, validating...")
                 if self._validate_video_file(file_path):
                     videos.append(file_path)

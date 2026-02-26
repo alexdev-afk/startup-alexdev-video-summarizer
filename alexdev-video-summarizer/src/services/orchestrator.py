@@ -44,8 +44,9 @@ class ProcessingResult:
 class VideoProcessingOrchestrator:
     """Main orchestrator for video processing pipeline"""
     
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: Dict[str, Any], output_dir: str = None):
         self.config = config
+        self.output_dir = Path(output_dir) if output_dir else Path(config.get('paths', {}).get('output_dir', 'output'))
         
         # Initialize services
         self.ffmpeg_service = FFmpegService(config)
@@ -259,8 +260,8 @@ class VideoProcessingOrchestrator:
             knowledge_file = None
             
             if video_timeline_sources:
-                # Create organized output directory structure: output/{videoname}/
-                video_output_dir = Path("output") / context.video_name
+                # Create organized output directory structure: {output_dir}/{videoname}/
+                video_output_dir = self.output_dir / context.video_name
                 video_output_dir.mkdir(parents=True, exist_ok=True)
                 
                 # Knowledge file: output/{videoname}/{videoname}_knowledge.md

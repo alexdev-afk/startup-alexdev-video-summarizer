@@ -38,7 +38,7 @@ class VideoProcessorCLI:
         self.verbose = verbose
         
         self.console = Console(force_terminal=True, width=120)
-        self.orchestrator = VideoProcessingOrchestrator(config)
+        self.orchestrator = VideoProcessingOrchestrator(config, output_dir=output_dir)
         
         # Ensure directories exist
         self.output_dir.mkdir(parents=True, exist_ok=True)
