@@ -25,6 +25,8 @@ function switchTab(name) {
   if (name === 'queue') loadQueue();
   if (name === 'history') loadHistory();
   if (name === 'detail' && currentDetailBatch) loadBatchDetail(currentDetailBatch);
+  if (name === 'logs') startLogPolling();
+  else stopLogPolling();
 }
 
 // ── File Browser ─────────────────────────────────────────────────
@@ -460,6 +462,50 @@ function toast(msg, type) {
   container.appendChild(el);
   setTimeout(() => el.remove(), 5000);
 }
+
+// ── Logs ─────────────────────────────────────────────────────────
+
+let logSeq = 0;
+let logPollTimer = null;
+
+function startLogPolling() {
+  if (logPollTimer) return;
+  pollLogs(); // immediate first fetch
+  logPollTimer = setInterval(pollLogs, 2000);
+}
+
+function stopLogPolling() {
+  if (logPollTimer) { clearInterval(logPollTimer); logPollTimer = null; }
+}
+
+async function pollLogs() {
+  try {
+    const r = await fetch('/api/logs?since=' + logSeq);
+    const data = await r.json();
+    if (data.logs.length > 0) {
+      const panel = document.getElementById('log-panel');
+      for (const line of data.logs) {
+        const div = document.createElement('div');
+        div.className = 'log-line';
+        if (/ERROR/i.test(line)) div.className += ' error';
+        else if (/WARN/i.test(line)) div.className += ' warning';
+        div.textContent = line;
+        panel.appendChild(div);
+      }
+      // Cap DOM nodes
+      while (panel.children.length > 5000) panel.removeChild(panel.firstChild);
+      // Auto-scroll
+      if (document.getElementById('log-autoscroll').checked) {
+        panel.scrollTop = panel.scrollHeight;
+      }
+    }
+    logSeq = data.seq;
+  } catch (e) { /* ignore transient failures */ }
+}
+
+document.getElementById('btn-clear-logs').addEventListener('click', () => {
+  document.getElementById('log-panel').innerHTML = '';
+});
 
 // ── Init ─────────────────────────────────────────────────────────
 

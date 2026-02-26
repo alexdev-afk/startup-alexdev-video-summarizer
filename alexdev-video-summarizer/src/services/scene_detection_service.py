@@ -282,6 +282,7 @@ class SceneDetectionService:
             
             total_frames = sum(len(scene_data.get('frames', {})) for scene_data in frame_data.get('scenes', {}).values())
             logger.info(f"Frame extraction complete: {total_frames} frames created")
+            frame_data['total_frames_extracted'] = total_frames
             return frame_data
             
         except Exception as e:

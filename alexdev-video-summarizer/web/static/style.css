@@ -404,6 +404,26 @@ header .worker-status .dot.running {
 .empty-state .icon { font-size: 48px; margin-bottom: 16px; }
 .empty-state p { font-size: 16px; }
 
+/* ── Log Panel ────────────────────────────────────────────────── */
+.log-panel {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 16px;
+  font-family: 'Cascadia Code', 'Consolas', 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  height: calc(100vh - 180px);
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.log-panel .log-line { margin: 0; }
+.log-panel .log-line.error { color: var(--error); }
+.log-panel .log-line.warning { color: var(--warning); }
+
 /* ── Toast Notifications ──────────────────────────────────────── */
 .toast-container {
   position: fixed;

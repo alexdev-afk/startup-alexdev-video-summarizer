@@ -21,6 +21,7 @@
   <div class="tab" data-tab="queue">Queue</div>
   <div class="tab" data-tab="detail">Batch Detail</div>
   <div class="tab" data-tab="history">History</div>
+  <div class="tab" data-tab="logs">Logs</div>
 </nav>
 
 <!-- ── File Browser ──────────────────────────────────────────── -->
@@ -72,6 +73,17 @@
 <!-- ── History ─────────────────────────────────────────────────── -->
 <div class="screen" id="screen-history">
   <div id="history-list"></div>
+</div>
+
+<!-- ── Logs ────────────────────────────────────────────────────── -->
+<div class="screen" id="screen-logs">
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+    <label style="font-size:13px;color:var(--text-secondary)">
+      <input type="checkbox" id="log-autoscroll" checked> Auto-scroll
+    </label>
+    <button class="btn btn-secondary btn-sm" id="btn-clear-logs">Clear</button>
+  </div>
+  <div class="log-panel" id="log-panel"></div>
 </div>
 
 <div class="toast-container" id="toast-container"></div>

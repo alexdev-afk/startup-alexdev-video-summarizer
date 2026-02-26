@@ -1,6 +1,8 @@
 """Flask web server for video summarizer batch processing UI."""
 
+import collections
 import json
+import logging
 import os
 import queue
 import sys
@@ -9,6 +11,37 @@ import time
 from pathlib import Path
 
 from flask import Flask, Response, jsonify, request, send_from_directory
+
+
+# ── Circular Buffer Log Handler ───────────────────────────────────
+class BufferLogHandler(logging.Handler):
+    """Captures log records into a fixed-size deque with a monotonic sequence."""
+
+    def __init__(self, maxlen: int = 5000):
+        super().__init__()
+        self.buffer: collections.deque = collections.deque(maxlen=maxlen)
+        self.seq: int = 0
+        self._lock = threading.Lock()
+
+    def emit(self, record):
+        try:
+            msg = self.format(record)
+            with self._lock:
+                self.seq += 1
+                self.buffer.append(msg)
+        except Exception:
+            self.handleError(record)
+
+    def get_since(self, since_seq: int) -> tuple[list[str], int]:
+        """Return (new_lines, current_seq) for lines added after since_seq."""
+        with self._lock:
+            seq = self.seq
+            new_count = seq - since_seq
+            if new_count <= 0:
+                return [], seq
+            buf = list(self.buffer)
+            new_count = min(new_count, len(buf))
+            return buf[-new_count:], seq
 
 # ── Path Setup ────────────────────────────────────────────────────
 # Add src/ to sys.path so we can import services and utils
@@ -40,6 +73,15 @@ def create_app(config_path: str = "config/processing.yaml") -> Flask:
 
     # Load processing config
     config = ConfigLoader.load_config(config_path)
+
+    # Logging — attach circular buffer handler to root logger
+    log_handler = BufferLogHandler(maxlen=5000)
+    log_handler.setLevel(logging.DEBUG)
+    log_handler.setFormatter(logging.Formatter(
+        "%(asctime)s  %(levelname)-5s  %(name)s — %(message)s",
+        datefmt="%H:%M:%S",
+    ))
+    logging.getLogger().addHandler(log_handler)
 
     # Queue manager
     queue_dir = str(_project_root / "queue")
@@ -218,6 +260,19 @@ def create_app(config_path: str = "config/processing.yaml") -> Flask:
             broadcast_sse("batch_deleted", {"batch_id": batch_id})
             return jsonify({"status": "deleted"})
         return jsonify({"error": "Batch not found"}), 404
+
+    # ── Logs ──────────────────────────────────────────────────────
+
+    @app.route("/api/logs")
+    def api_logs():
+        """Return log lines added since a given sequence number.
+
+        Query params:
+          since – sequence number (default 0, returns all buffered lines)
+        """
+        since_seq = request.args.get("since", 0, type=int)
+        lines, seq = log_handler.get_since(since_seq)
+        return jsonify({"logs": lines, "seq": seq})
 
     # ── SSE Stream ────────────────────────────────────────────────
 

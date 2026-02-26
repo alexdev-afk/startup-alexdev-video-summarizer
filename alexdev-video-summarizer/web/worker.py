@@ -37,6 +37,17 @@ class ProcessingWorker:
         self._current_batch_id = batch_id
         self._consecutive_failures = 0
 
+        # Reset any in_progress videos back to pending (from prior interrupted run)
+        manifest = self.queue_manager.get_batch(batch_id)
+        if manifest:
+            for idx, video in enumerate(manifest["videos"]):
+                if video["status"] == "in_progress":
+                    self.queue_manager.update_video_status(
+                        batch_id, idx,
+                        status="pending",
+                        current_stage=None,
+                    )
+
         self.queue_manager.update_batch_status(batch_id, "processing")
 
         self._thread = threading.Thread(
@@ -113,12 +124,17 @@ class ProcessingWorker:
                         self.queue_manager.update_video_status(
                             batch_id, vid_idx, current_stage=stage
                         )
+                        # Sanitize data: convert Path objects to strings for JSON
+                        safe_data = {
+                            k: str(v) if isinstance(v, Path) else v
+                            for k, v in data.items()
+                        } if isinstance(data, dict) else data
                         self.broadcast("progress", {
                             "batch_id": batch_id,
                             "video_index": vid_idx,
                             "filename": filename,
                             "stage": stage,
-                            "data": data,
+                            "data": safe_data,
                         })
                     return progress_cb
 
