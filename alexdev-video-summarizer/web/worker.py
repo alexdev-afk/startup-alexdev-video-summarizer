@@ -81,6 +81,7 @@ class ProcessingWorker:
 
         # Create orchestrator (loads models once per batch)
         orchestrator = VideoProcessingOrchestrator(self.config, output_dir)
+        orchestrator.allow_service_logging = True  # let logs flow to file + web UI
 
         try:
             for idx, video in enumerate(manifest["videos"]):

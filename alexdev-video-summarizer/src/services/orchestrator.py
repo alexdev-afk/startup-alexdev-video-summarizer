@@ -63,40 +63,51 @@ class VideoProcessingOrchestrator:
         self.circuit_breaker = CircuitBreaker(
             failure_threshold=config.get('circuit_breaker_threshold', 3)
         )
-        
+
+        # When True, _suppress_service_logging becomes a no-op so logs
+        # flow to file handlers and the web UI buffer instead of being killed.
+        self.allow_service_logging = False
+
     @contextlib.contextmanager
     def _suppress_service_logging(self):
-        """Suppress ALL logging and output from services during processing to keep CLI clean"""
+        """Suppress ALL logging and output from services during processing to keep CLI clean.
+
+        Becomes a no-op when allow_service_logging is True (web UI mode).
+        """
+        if self.allow_service_logging:
+            yield
+            return
+
         # Suppress ALL loggers by setting root logger to CRITICAL
         root_logger = logging.getLogger()
         old_root_level = root_logger.level
-        
+
         # Get snapshot of all existing loggers and their levels
         old_levels = {}
         logger_names = list(logging.Logger.manager.loggerDict.keys())  # Create snapshot
         for name in logger_names:
             logger_obj = logging.getLogger(name)
             old_levels[name] = logger_obj.level
-        
+
         try:
             # Silence ALL loggers
             root_logger.setLevel(logging.CRITICAL)
             for name in logger_names:
                 logging.getLogger(name).setLevel(logging.CRITICAL)
-                
+
             # Completely suppress stdout/stderr from services
             old_stdout = sys.stdout
             old_stderr = sys.stderr
             sys.stdout = StringIO()
             sys.stderr = StringIO()
-            
+
             yield
-            
+
         finally:
             # Restore stdout/stderr
             sys.stdout = old_stdout
             sys.stderr = old_stderr
-            
+
             # Restore ALL logger levels
             root_logger.setLevel(old_root_level)
             for name, level in old_levels.items():
