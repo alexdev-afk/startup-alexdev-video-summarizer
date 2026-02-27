@@ -224,6 +224,31 @@ header .worker-status .dot.running {
   color: var(--text-secondary);
 }
 
+.selection-bar .output-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  flex: 1;
+  max-width: 500px;
+}
+
+.selection-bar .output-label input {
+  flex: 1;
+  padding: 6px 10px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.selection-bar .output-label input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
 /* ── Queue / Batch Cards ──────────────────────────────────────── */
 .batch-grid {
   display: grid;

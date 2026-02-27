@@ -114,6 +114,16 @@ def create_app(config_path: str = "config/processing.yaml") -> Flask:
     def index():
         return send_from_directory(app.static_folder, "index.html")
 
+    # ── Config ────────────────────────────────────────────────────
+
+    @app.route("/api/config")
+    def api_config():
+        """Return relevant config defaults for the UI."""
+        return jsonify({
+            "output_dir": str(config.get("paths", {}).get("output_dir", "output")),
+            "input_dir": str(config.get("paths", {}).get("input_dir", "input")),
+        })
+
     # ── File Browser ──────────────────────────────────────────────
 
     @app.route("/api/browse")

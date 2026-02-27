@@ -172,7 +172,7 @@ async function createBatch() {
     const r = await fetch('/api/queue/create', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ files: [...selectedFiles] }),
+      body: JSON.stringify({ files: [...selectedFiles], output_dir: document.getElementById('output-path').value || undefined }),
     });
     const data = await r.json();
     if (data.error) { toast(data.error, 'error'); return; }
@@ -508,6 +508,11 @@ document.getElementById('btn-clear-logs').addEventListener('click', () => {
 });
 
 // ── Init ─────────────────────────────────────────────────────────
+
+// Load defaults from config
+fetch('/api/config').then(r => r.json()).then(cfg => {
+  document.getElementById('output-path').value = cfg.output_dir || 'output';
+}).catch(() => {});
 
 browsePath('');
 connectSSE();
