@@ -13,8 +13,7 @@ import contextlib
 from pathlib import Path
 from io import StringIO
 
-# Force UTF-8 mode on Windows (fixes charmap encoding errors with Unicode filenames)
-os.environ['PYTHONUTF8'] = '1'
+# Force UTF-8 on Windows (fixes charmap encoding errors with Unicode filenames)
 if sys.platform == 'win32':
     sys.stdout.reconfigure(encoding='utf-8', errors='replace')
     sys.stderr.reconfigure(encoding='utf-8', errors='replace')

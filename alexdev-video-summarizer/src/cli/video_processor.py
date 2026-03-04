@@ -317,7 +317,7 @@ class VideoProcessorCLI:
     def _cleanup_build_directory(self, video_path: Path):
         """Clean up build directory for specific video after processing (unless in verbose mode)"""
         # Get video name without extension for build directory
-        video_name = video_path.stem
+        video_name = video_path.stem.strip()
         build_dir = Path("build") / video_name
         
         if build_dir.exists():

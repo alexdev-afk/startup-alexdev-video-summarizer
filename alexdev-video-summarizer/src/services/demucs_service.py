@@ -52,13 +52,17 @@ class DemucsService:
         ]
 
         try:
-            # Execute the command
+            # Execute the command (PYTHONUTF8=1 prevents cp1252 crashes with Unicode filenames)
+            import os
+            env = os.environ.copy()
+            env['PYTHONUTF8'] = '1'
             process = subprocess.run(
                 command,
                 check=True,
                 capture_output=True,
                 text=True,
-                encoding='utf-8'
+                encoding='utf-8',
+                env=env
             )
             logger.info("Demucs process completed successfully.")
             logger.debug(f"Demucs stdout: {process.stdout}")

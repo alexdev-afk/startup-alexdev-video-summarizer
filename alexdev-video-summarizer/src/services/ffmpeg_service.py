@@ -102,7 +102,7 @@ class FFmpegService:
         logger.info(f"Extracting streams from: {video_path.name}")
         
         # Create output directory for this video
-        video_name = video_path.stem
+        video_name = video_path.stem.strip()
         output_dir = self.build_dir / video_name
         output_dir.mkdir(exist_ok=True)
         

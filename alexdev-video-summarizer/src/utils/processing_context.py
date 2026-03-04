@@ -32,7 +32,7 @@ class VideoProcessingContext:
     
     def __post_init__(self):
         """Initialize processing context"""
-        self.video_name = self.video_path.stem
+        self.video_name = self.video_path.stem.strip()
         self.build_directory = Path('build') / self.video_name
         self.build_directory.mkdir(parents=True, exist_ok=True)
         
