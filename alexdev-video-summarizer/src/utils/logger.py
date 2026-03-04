@@ -50,7 +50,8 @@ def setup_logging(log_level: str = 'INFO', config: Dict[str, Any] = None):
     file_handler = logging.handlers.RotatingFileHandler(
         main_log_file,
         maxBytes=10 * 1024 * 1024,  # 10MB
-        backupCount=3
+        backupCount=3,
+        encoding='utf-8'
     )
     file_handler.setLevel(logging.DEBUG)
     file_handler.setFormatter(detailed_formatter)
@@ -61,7 +62,8 @@ def setup_logging(log_level: str = 'INFO', config: Dict[str, Any] = None):
     error_handler = logging.handlers.RotatingFileHandler(
         error_log_file,
         maxBytes=5 * 1024 * 1024,  # 5MB
-        backupCount=3
+        backupCount=3,
+        encoding='utf-8'
     )
     error_handler.setLevel(logging.ERROR)
     error_handler.setFormatter(detailed_formatter)

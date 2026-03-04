@@ -14,7 +14,10 @@ from pathlib import Path
 from io import StringIO
 
 # Force UTF-8 mode on Windows (fixes charmap encoding errors with Unicode filenames)
-os.environ.setdefault('PYTHONUTF8', '1')
+os.environ['PYTHONUTF8'] = '1'
+if sys.platform == 'win32':
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    sys.stderr.reconfigure(encoding='utf-8', errors='replace')
 
 # Add src to Python path for imports
 sys.path.insert(0, str(Path(__file__).parent))
